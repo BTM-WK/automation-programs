@@ -1,0 +1,12 @@
+# RFP Radar v8.1
+config.json
+data/daily_reports/*.json
+data/daily_reports/*.xlsx
+data/daily_reports/*.log
+*.pyc
+__pycache__/
+copy_to_git.py
+do_register.py
+task_result.txt
+email_preview.html
+*.log

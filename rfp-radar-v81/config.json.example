@@ -1,0 +1,22 @@
+{
+  "service_key": "YOUR_G2B_API_KEY",
+  "openai_api_key": "YOUR_OPENAI_API_KEY",
+  "sender_email": "your-email@gmail.com",
+  "sender_password": "YOUR_APP_PASSWORD",
+  "recipient_email": "your-email@gmail.com",
+  "use_gpt": true,
+  "gpt_threshold": 55,
+  "send_email": true,
+  "search_days": 7,
+  "smtp_server": "smtp.gmail.com",
+  "smtp_port": 587,
+  "recipient_emails": [
+    "member1@company.com",
+    "member2@company.com"
+  ],
+  "crawl_enabled": true,
+  "crawl_timeout": 15,
+  "crawl_delay": 1.0,
+  "crawl_priority_only": false,
+  "gpt_parse_model": "gpt-4o-mini"
+}
