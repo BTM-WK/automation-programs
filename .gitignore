@@ -1,0 +1,24 @@
+# ===========================
+# RFP Radar - Git 제외 목록
+# ===========================
+
+# 민감 정보 (절대 커밋 금지!)
+config.json
+*.secret
+
+# 실행 결과 파일
+rfp_radar/data/daily_reports/*.json
+rfp_radar/data/daily_reports/*.xlsx
+rfp_radar/data/daily_reports/*.html
+!rfp_radar/data/daily_reports/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

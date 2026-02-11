@@ -1,0 +1,59 @@
+# ============================================================
+# RFP Radar v8.2 - 자동 실행 워크플로우
+# 매일 월~금 한국시간 9:00 AM 실행
+# ============================================================
+name: RFP Radar Daily
+
+on:
+  schedule:
+    # UTC 0:00 = KST 9:00 AM (월~금)
+    - cron: '0 0 * * 1-5'
+  
+  # 수동 실행 (테스트용)
+  workflow_dispatch:
+
+jobs:
+  rfp-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. 코드 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Python 설정
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # 3. 의존성 설치
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r rfp_radar/requirements.txt
+
+      # 4. 출력 디렉토리 생성
+      - name: Create output directory
+        run: mkdir -p rfp_radar/data/daily_reports
+
+      # 5. RFP Radar 실행
+      - name: Run RFP Radar
+        env:
+          RFP_SERVICE_KEY: ${{ secrets.RFP_SERVICE_KEY }}
+          RFP_OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
+          RFP_SENDER_EMAIL: ${{ secrets.RFP_SENDER_EMAIL }}
+          RFP_SENDER_PASSWORD: ${{ secrets.RFP_SENDER_PASSWORD }}
+          RFP_RECIPIENT_EMAILS: ${{ secrets.RFP_RECIPIENT_EMAILS }}
+        working-directory: rfp_radar
+        run: python rfp_radar_v82.py
+
+      # 6. 실행 결과 아카이브 (7일 보관)
+      - name: Archive results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfp-results-${{ github.run_id }}
+          path: rfp_radar/data/daily_reports/
+          retention-days: 7
