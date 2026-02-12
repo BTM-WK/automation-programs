@@ -1,6 +1,6 @@
 # ============================================================
-# RFP Radar v8.2 - 자동 실행 워크플로우
-# 매일 월~금 한국시간 9:00 AM 실행
+# RFP Radar v8.3 - 자동 실행 워크플로우
+# 매일 월~금 한국시간 9:00 AM 실행 (GitHub Actions)
 # ============================================================
 name: RFP Radar Daily
 
@@ -38,8 +38,8 @@ jobs:
       - name: Create output directory
         run: mkdir -p rfp_radar/data/daily_reports
 
-      # 5. RFP Radar 실행
-      - name: Run RFP Radar
+      # 5. RFP Radar v8.3 실행
+      - name: Run RFP Radar v8.3
         env:
           RFP_SERVICE_KEY: ${{ secrets.RFP_SERVICE_KEY }}
           RFP_OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
@@ -47,7 +47,7 @@ jobs:
           RFP_SENDER_PASSWORD: ${{ secrets.RFP_SENDER_PASSWORD }}
           RFP_RECIPIENT_EMAILS: ${{ secrets.RFP_RECIPIENT_EMAILS }}
         working-directory: rfp_radar
-        run: python rfp_radar_v82.py
+        run: python rfp_radar_v83.py
 
       # 6. 실행 결과 아카이브 (7일 보관)
       - name: Archive results
