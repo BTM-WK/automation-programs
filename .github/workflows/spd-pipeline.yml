@@ -1,0 +1,111 @@
+name: SPD Pipeline
+
+on:
+  # RFP Radar 완료 시 자동 트리거
+  workflow_run:
+    workflows: ["RFP Radar Daily"]
+    types: [completed]
+    branches: [main]
+  
+  # 수동 실행
+  workflow_dispatch:
+    inputs:
+      min_grade:
+        description: '최소 등급 필터 (S, A, B)'
+        required: false
+        default: 'A'
+      specific_bid:
+        description: '특정 공고번호 (빈칸=전체)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'DRY-RUN (GPT 미호출)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  spd-analysis:
+    runs-on: ubuntu-latest
+    # RFP Radar 성공 시에만 실행 (수동 트리거는 항상)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      # 1. 코드 체크아웃
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # 2. Python 설정
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      # 3. 의존성 설치
+      - name: Install dependencies
+        run: |
+          pip install -r spd/requirements.txt
+          # HWP 변환용 LibreOffice
+          sudo apt-get update && sudo apt-get install -y libreoffice-core libreoffice-writer
+      
+      # 4. RFP Radar 결과 가져오기 (워크플로우 트리거 시)
+      - name: Download RFP Radar results
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rfp-results-${{ github.event.workflow_run.id }}
+          path: rfp_radar/data/daily_reports/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      # 5. 출력 디렉토리 생성
+      - name: Create output directories
+        run: |
+          mkdir -p spd/data/downloads
+          mkdir -p spd/data/extracted
+          mkdir -p spd/data/fetch_results
+          mkdir -p spd/data/analysis_results
+      
+      # 6. Phase 1-A: Auto-Fetch
+      - name: Run Auto-Fetch
+        env:
+          RFP_SERVICE_KEY: ${{ secrets.RFP_SERVICE_KEY }}
+        working-directory: spd
+        run: |
+          GRADE="${{ github.event.inputs.min_grade || 'A' }}"
+          BID="${{ github.event.inputs.specific_bid || '' }}"
+          
+          CMD="python spd_auto_fetch.py --grade $GRADE"
+          if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
+          
+          echo "🚀 Auto-Fetch: $CMD"
+          eval $CMD
+      
+      # 7. Phase 1-B: Analysis
+      - name: Run Analysis Engine
+        env:
+          RFP_OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
+        working-directory: spd
+        run: |
+          DRY="${{ github.event.inputs.dry_run || 'false' }}"
+          BID="${{ github.event.inputs.specific_bid || '' }}"
+          
+          CMD="python spd_analysis_engine.py"
+          if [ "$DRY" = "true" ]; then CMD="$CMD --dry-run"; fi
+          if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
+          
+          echo "🔬 Analysis: $CMD"
+          eval $CMD
+      
+      # 8. 결과 아카이브
+      - name: Archive SPD results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spd-results-${{ github.run_id }}
+          path: |
+            spd/data/fetch_results/
+            spd/data/analysis_results/
+          retention-days: 14
