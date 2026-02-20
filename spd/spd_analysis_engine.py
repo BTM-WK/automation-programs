@@ -3,8 +3,8 @@
 """
 SPD Phase 1-B: Analysis Engine
 ==================================
-Auto-Fetch 결과 → GPT-4o 4대 영역 정밀분석 → ChromaDB 유사프로젝트 매쩭
-→ Go/No-Go 스코어카드 → 종합 진단 리폨트 생성
+Auto-Fetch 결과 → GPT-4o 4대 영역 정밀분석 → ChromaDB 유사프로젝트 매칭
+→ Go/No-Go 스코어카드 → 종합 진단 리포트 생성
 
 4대 분석 영역:
   01. 역량 부합도 분석 (Capability Fit Score)
@@ -46,9 +46,9 @@ try:
     import chromadb
 except ImportError:
     chromadb = None
-    print("⚠️ chromadb 미설치 — 유사 프로젝트 매칭 프활성화")
+    print("⚠️ chromadb 미설치 — 유사 프로젝트 매칭 비활성화")
 
-# v2 고도화 프롬프트 (있으메 사용, 없으메 내장 v1 fallback)
+# v2 고도화 프롬프트 (있으면 사용, 없으면 내장 v1 fallback)
 try:
     from spd_prompts_v2 import SYSTEM_PROMPT_V2, build_analysis_prompt_v2
     PROMPT_VERSION = "v2"
@@ -96,7 +96,7 @@ log = logging.getLogger("AnalysisEngine")
 # v1 내장 프롬프트 (v2 미발견 시 폴백)
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_V1 = """당신은 WKMG(WK Marketing Group)의 B2G 입찰 전랹 분석 전문가입니다.
+SYSTEM_PROMPT_V1 = """당신은 WKMG(WK Marketing Group)의 B2G 입찰 전략 분석 전문가입니다.
 
 WKMG 프로파일:
 - 16년 B2G 마케팅 컨설팅 전문기업
@@ -105,7 +105,7 @@ WKMG 프로파일:
 - 사회적기업 유통지원 7년 연속 수주
 
 분석 시 주의사항:
-- 구체적 근롰 없이 낙관적 평가 금지
+- 구체적 근거 없이 낙관적 평가 금지
 - 70점 미만은 반드시 NO-GO 또는 CONDITIONAL GO 판단
 - WKMG의 실제 실적과 연결하여 분석
 - 경쟁 환경도 반드시 고려"""
@@ -155,15 +155,15 @@ def build_analysis_prompt_v1(bid_result: Dict, rfp_text: str, similar_projects: 
     "timeline_days": 14
   },
   "key_success_factors": {
-    "top3_ksf": ["실적 기반 신뢰성", "현장 경험", "유통 네트워큫"],
-    "differentiators": ["B2B+B2G �u합 역량"],
+    "top3_ksf": ["실적 기반 신뢰성", "현장 경험", "유통 네트워크"],
+    "differentiators": ["B2B+B2G 복합 역량"],
     "risks": ["담당자 교체 가능성"]
   },
   "proposal_blueprint": {
     "recommended_toc": ["사업이해", "수행전략", "실적", "조직"],
     "page_estimate": "45~55p",
     "key_visuals": ["연도별 성과 추이 그래프"],
-    "tone": "현장 경혘 기반 실무형"
+    "tone": "현장 경험 기반 실무형"
   },
   "competitive_landscape": {
     "likely_competitors": ["공공컨설팅사"],
@@ -185,7 +185,7 @@ def build_analysis_prompt_v1(bid_result: Dict, rfp_text: str, similar_projects: 
 # ═══════════════════════════════════════════════════════════════
 
 def get_similar_projects(query_text: str, config: Dict) -> List[Dict]:
-    """ChromaDB에서 유사 과거 프로젝트 매쩭"""
+    """ChromaDB에서 유사 과거 프로젝트 매칭"""
     if not chromadb:
         return []
     
@@ -193,7 +193,7 @@ def get_similar_projects(query_text: str, config: Dict) -> List[Dict]:
     collection_name = config.get("chromadb_collection", "wkmg_projects")
     
     if not os.path.exists(db_dir):
-        log.info("  ℹ️ ChromaDB 없음 — 유사 프로젝트 매쩭 스킵")
+        log.info("  ℹ️ ChromaDB 없음 — 유사 프로젝트 매칭 스킵")
         return []
     
     try:
@@ -473,7 +473,7 @@ def run_analysis(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SPD Analysis Engine")
     parser.add_argument("--fetch", help="특정 fetch 결과 JSON 경로")
-    parser.add_argument("--bid", help="퉹정 공고번호만 분석")
+    parser.add_argument("--bid", help="특정 공고번호만 분석")
     parser.add_argument("--dry-run", action="store_true", help="GPT 호출 없이 구조 확인")
     
     args = parser.parse_args()
