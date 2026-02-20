@@ -1,0 +1,152 @@
+[페이지 1]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+대외비 | 협의용
+골프존 브랜드 관리시스템 강화
+(Brand Hierarchy 설계를 중심으로)
+Ver.1.0
+WK MARKETING GROUP
+www.wkmg.co.kr
+
+[페이지 2]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Background
+[골프존] 브랜드 체계 재정립 및 시스템 강화를 통해
+급변하는 골프 시장에서의 확고한 리더쉽 확보가 필요
+Covid-19로 인한 레저문화 변화로 촉발된 MZ세대 및 여성층의 골프시장 유입 가속화는 새로운 시장 성장동력으로 작동하고 있으며,
+디지털 新 기술을 앞세운 후발주자의 맹추는 위협 요인으로 현재 골프존은 위기이자 기회의 갈림길에 있음.
+이러한 환경변화 속에서 시장기회를 통한 성장과 지속적인 브랜드 리더십 강화를 위한 브랜드 체계 재정립 과제 해결이 필요.
+다양한 사업기회를 민첩하게 선점 확장해야 하는 Biz Golden Time
+가파르게 성장 중인 국내 골프 산업 규모 카카오 VX, SG골프, 네이버 등의 적극적인 시장진입 골프 대중화가 반영된 골프예능 대세
+2012년4조원에서2019년6조7000억원으로늘었고 카카오프렌즈스크린을통한적극적인시장진입과 골프왕, 땡스골프, 찐친골프등주요방송사에서
+2023년엔9조원을넘어설것으로예상 N골프를통한네이버의신중한시장진입 골프관련예능프로그램운영
+2
+
+[페이지 3]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Goal & Scope
+시장점유율 1위, 높은 인지도 등 구축된 브랜드 자산의
+전략적 활용에 따른 최적의 운용 전략도출과 시스템화 긴급 추진 必
+Practical Branding
+Identity Tunning & Architecture Design
+Scope
+▪시대 변화에 따른 시대 부각가치 및 경쟁 가치 관점에서의 보강
+Identity
+Tunning ▪다소 피상적인 아이덴티티로 자의적 해석 오류 방지 필요
+▪브랜드 구성요소(슬로건, 스토리, 심볼 등)의 커뮤니케이션 경쟁 관점에서 최적화 점검
+▪현 경영환경 및 미래 비즈니스 진화 관점에서 旣 수립된 브랜드 운용관리 지침의 점검
+Architecture ▪브랜드 체계 간 명확한 위상 및 역할에 따른 운용 옵션의 전략적 정립을 통한 현업 적용 가능성 극대화 설계
+Design
+▪단지 간략하고 모양새 좋은 브랜드 체계가 아닌 業의 특성과 사업전략 관점에서 최적화된 Architecture 설계
+(효율성, 산업적합성, 확장성, 시너지, 브랜드 자립성 등 criteria 점검)
+Manual
+▪담당자 , 추진사업 등 이슈에 따른 해석이 아닌 원칙을 통한 브랜드 관리를 위한 가이드 제공 (Brand Rule)
+&
+Advisory ▪컨설팅 이후 일정기간 동안 브랜드 Rule 적용의 타당서에 대한 자문서비스 제공을 통한 브랜드 관리 지침 내제화
+
+[페이지 4]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Overview:Whole Brand Management Framework
+브랜드마케팅의 핵심 주제인 총체적 브랜드경험관리(HBEM) 구조관점 에서,
+최우선 핵심 과제 BI,BS 튜닝 및 이에 따른 Brand TextBook 업데이트,
+이를 반영한 진화한 B.A설계와 현업 적용 가이드라인(Rule,매뉴얼) 중점 추진하고자 함.
+HBEM(Holistic Brand Experience Management)
+Scope 1
+튜닝및보강
+Scope 2
+튜닝및보강
+Scope 3
+신규제공
+Scope 과제영역
+
+[페이지 5]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Viewpoint
+실전적이고 성공적인 브랜드 관리 체계 고도화를 위한 WKMG Viewpoint
+브랜드
+• 브랜드아이덴터티와브랜드가치는명확해야한다.
+가치
+직원누가보더라도95% 이상같은의미로
+• 브랜드아키텍처, 특히하이어라키는
+이해할수있어야한다. &
+그래야만소비자가brand voice 를
+아이덴티티
+1) 소비자가쉽게인식하게설계되어야하고
+느끼게된다.
+2) 브랜드간시너지가치가극대화되어야하며
+(회사브랜드+개별브랜드, 회사브랜드+개별브랜드+서브브랜드,
+또는개별브랜드+브랜드슬로건+서브브랜드),
+3) 적용및확장의기준이명확해야하고
+적용시시각적비중까지도고려되어야한다.
+4) 하이어라키설계및적용에는
+과학적,이론적근거가있어야한다.
+• 브랜드관리매뉴얼에는브랜드불변요소,
+브랜드가변요소, 탄력적변화요소가적시되어야하고
+항목별로의미,중요성,기준,사례,특기사항이
+포함되어누구라도쉽게이해하고관리가용이해야한다.
+• 인간적매력과감성의
+기본요소인브랜드스타일 ※본프로젝트의Main Scope
+(舊브랜드퍼스낼러티)이
+준비되어야한다. 브랜드
+• 브랜드혜택에브랜드매력이 브랜드매력 아키텍처
+더해져야브랜드는
+브랜드 &
+발전적으로진화하며
+스타일 하이어라키
+브랜드스타일은
+브랜드매력의필요조건이다.
+
+[페이지 6]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Budget
+프로젝트 기간은 16주 기본으로 수행 제안 함
+Scope 세부내용 소요기간
+•1,2차자료조사/분석
+•임직원및사업부구성원인터뷰진행(관련자에한함)
+•산업분석
+•고객분석 4.0 weeks
+Brand Diagnosis/
+•경쟁분석
+Issue Finding
+•자사분석
+•Case Study (Benchmarking)
+•브랜드핵심가치분석(Core / Extended Value)
+•브랜드포지셔닝설정을위한아이덴티티진단: to-be Positioning
+•HIT-A 분석을통한핵심Heritage 정교화
+Brand IdentityTunning
+•시대부각가치/ 경쟁차별화가치도출 5.0 weeks
+•브랜드매력가치강화를위한브랜드스타일개발
+•브랜드플랫폼튜닝(핵심요소중심으로)
+•브랜드운용체계구축(위상/보증관계)
+-Brand Portfolio 점검 4.0 weeks
+Brand Structuring
+-Brand Architecture 설계
+•브랜드Rule 옵션별매뉴얼제작/ 적용예시시각화(ex,디스플레이원칙, 노출비중등)
+Brand Manual 3.0 weeks
+•가이드라인구축
+Brand Advisory •브랜드Rule 적용자문: 연간3회이내(회당1시간내), 2년간제공 -
+16.0 weeks
+
+[페이지 7]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Project Fee
+컨설턴트 총 5인, 16주 참여하며 산출내역은 하기와 같음.
+구분 Role Level Fee/Week(원) 투입기간 투입률 컨설팅 비용
+Project Director Master / CEO 11,000,000 30% 52,800,000
+Project Leader Specialist / 상무 5,500,000 40% 35,200,000
+컨설팅 16W
+Consultant Consultant / 1인 2,100,000 60% 20,160,000
+Assistant Consultant Consultant / 2인 1,200,000 60% 11,520,000
+견적가 119,680,000
+제안가 (백만원단위 이하 절사) / VAT 별도 119,000,000
+
+[페이지 8]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Manpower
+
+[페이지 9]
+CONFIDENTIAL –DRAFT FOR DISCUSSION PURPOSES ONLY
+Manpower
+9
+
+[페이지 10]
+WK MARKETING GROUP

@@ -1,0 +1,376 @@
+[슬라이드 1]
+본 문서는 LG전자 내부 용도로만 사용될 수 있으며 어떤 부분도
+  WKMG의 사전 서면 승인 없이 LG전자 외부에서 회람, 인용, 또는 
+  복제될 수 없습니다.
+Nov. 24. 2011
+Styler Consulting 
+Proposal
+Extremely
+Confidential
+귀중
+
+[슬라이드 2]
+2
+Project 설계 방향
+
+본 프로젝트는  출시 1년이 지난 스타일러에 대해 전반적이며 객관적인 점검을 통해서 판매 활성화를 
+저해하는 Bottleneck을 규명하고 그 해결방안을 모색함과 동시에 판매활성화를 위한 상품 차원의 준비를 
+하기 위해 설계 되었습니다.
+
+WKMG 문제인식
+“슬림화, 어떤 Spec이 최적일까?”
+“What is next?”
+Styler 판매 활성화를 위한
+상품 차원의 준비는 무엇이 되어야 하는가?
+
+[슬라이드 3]
+3
+Consulting Framework
+
+[슬라이드 4]
+전략 수립
+소비자 검증
+B2B 
+소비자 조사
+4
+Consulting Framework
+B2C 
+소비자 조사
+스타일러 판매
+Bottleneck 가설 수립
+소비자 조사 결과
+- Gang Survey (2011.10)
+- FGD (2011.10)
+
+판매사원 인터뷰
+판매사원 5人
+
+브랜드 지표
+인지도
+광고상기
+
+예상 Bottleneck List
+제품 가격
+제품 크기
+낮은 Reputation
+정보부족
+인지 부족
+성능 불만족 (구김)
+Concept power
+조사 대상 
+구입 의향자 20名
+구입자  10名
+
+조사방식
+In Depth Interview
+   (구입 의향자)
+Home Visiting (구입자)
+
+조사내용
+Bottleneck 심층 분석
+
+구입자
+성능/크기 불만족 
+동작 프로세스 관찰
+
+구입 의향자
+제품 크기 / 용량
+제품 가격
+정보 부족
+낮은 Reputation
+조사 대상 
+요식업  3인
+접객업소 3인
+건설업체 2인
+인테리어 2인
+
+조사방식
+In Depth Interview
+
+조사내용
+Bottleneck 심층 분석
+Output Image
+
+1. 상품전략 外 판매활성화 
+    아이디어/전략 제언
+
+2. SS 상품전략Forecasting
+
+3. 가상제품별 시장성과 
+    Simulation
+
+4. 판매 Bottleneck 규명
+
+5. 후속모델 Spec 결정
+
+6. R&D우선순위 선정
+
+7. Product Strategy
+    (보강,강화,확장 의사결정)
+   - 모델별 고객  Matching
+   - Synergy 창출
+   - 카니발 제어 전략
+본 프로젝트는 5단계로 구성되었으며 총 10주로 설계되었습니다.
+조사 대상 
+구입 의향자 60名
+B2B 관계자 10名
+
+조사방식
+Gang Survey (구입의향자)
+In Depth Interview
+   (B2B )
+
+조사내용
+최종 후속 모델 Spec
+주요  가설 Solution
+  소비자 검증
+* 기간 단축을 위해 B2C 및 B2B 조사는 동시에 수행됨.
+
+[슬라이드 5]
+Phase V
+5
+Consulting Framework
+日 덴쯔社의 소비자 구매모형인 AISAS모델을 통해 스타일러 판매의 Bottleneck을 종합적으로 발굴함.
+상기에서 시행했던 소비자조사(Gang, FGD)를 기반으로  판매사원 In Depth 인터뷰를 활용하여
+Bottleneck을 발견하고 해결할 수 있는 가설 Solution을 수립함.
+AISAS Model™ , Dentsu , 2005
+Category 인지 / Brand 인지
+정인지/오인지/ KMF
+Concept 수용도/만족도
+구매의향/기대기능
+가격 수준/ 매장 방문 문의
+제품 사용후기
+실 구입 가격 (할인행사)/
+설치장소/유지비용
+사용 만족도/기능별 만족도
+사용횟수/1회 사용벌수/추천의향
+Phase IV
+Phase III
+Phase II
+Phase I
+Gang Survey
+구입자
+스타일러에 대해서 알게 되고 주목하는 단계
+스타일러에 대해서 흥미와 관심을 가지게 되는 단계
+흥미를 가지고 있는 스타일러에 
+대해 정보를 검색하는 단계
+(매장 방문/인터넷 검색 등)
+구입기회 또는 구입 여건이 될 경우
+구입하는 단계
+내가 구입한 스타일러에 대해서
+온-오프 상으로 평가하고 알리는 단계
+구입예정자
+FGD
+구입자
+구입예정자
+판매사원 인터뷰
+(서울/경기 Top 5 판매원)
+가설구매 Bottleneck
+Source
+브랜드 지표
+스타일러 판매
+Bottleneck 가설 수립 | B2C 소비자 조사 | B2B 소비자 조사 | 소비자 검증 | 전략 수립
+
+[슬라이드 6]
+6
+Consulting Framework
+구입예정자 (n=20)
+기 구입자 (n=10)
+목적
+ - Interest-Search 단계에서 발생 가능한 구매 
+   Barrier를 확인하고 대처 방안 검증
+
+조사 방법
+ - 1:1 대면 인터뷰 (Size 비교가 가능하도록 스타일러가 
+     설치된 장소에서 진행)
+
+주요 조사항목 (예시)
+ - 구매 의사결정 Barrier 
+ - Size 선호도 및 선호 이유
+ - 적정 가격
+ - Size-처리용량-가격 조합
+목적
+ - 구매까지 발생한 구매 Barrier 설득논리 청취
+ - 사용 경험 및 불편사항 청취
+ - 구입초기 기대수준 및 사용 만족도 Gap 파악
+
+조사 방법
+ - 1:1 대면 인터뷰 (Home Visiting)
+
+주요 조사항목 (예시)
+ - 구매의사 결정 Barrier
+ - 구매 만족도 / 지불가치
+ - 기대치-Performance Gap
+ - 예상 1회 처리 용량 / 사용 횟수
+ - 실제 1회 처리 용량 / 사용 횟수
+ - 주 처리 의류 및 상황
+가설 Solution 검증을 위해 소비자 1:1 대면 인터뷰 진행함.
+Phase V
+Phase IV
+Phase III
+Phase II
+Phase I
+스타일러 판매
+Bottleneck 가설 수립 | B2C 소비자 조사 | B2B 소비자 조사 | 소비자 검증 | 전략 수립
+
+[슬라이드 7]
+7
+Consulting Framework
+B2B 판매 활성화를 위한 의견을 청취하고 B2B 판매활성화 방향과 주력모델을 선정함.
+요식업  (n=3)
+대상 
+ - 스타일러  설치 업소/스타일러  설치 희망업소
+
+주요조사 항목
+ - 설치 업소 : 설치이유/고객 호응도/개선사항
+ - 설치 희망 업소 : 설치이유/기대효과/인지경로
+                        구매 Bottleneck
+건설사 (n=2)
+대상 
+ - 스타일러  계약 업체/스타일러  계약 희망업체
+
+주요조사 항목
+ - 설치 업체 : 설치이유/분양효과/빌트인 개선사항
+ - 설치 희망 업체 : 설치이유/기대효과/구매 Bottleneck
+접객업소 (n=3)
+대상 
+ - 스크린 골프 / 휘트니스 센터 /미용실 등 접객 업소
+
+주요조사 항목
+ - 업소 필요도/기대효과/구매 Bottleneck/필요기능
+가구/인테리어 (n=2)
+대상 
+ - 한샘 / 인테리어 시공사
+
+주요조사 항목
+ - 고객 호응도/시공불편사항(제품 및 프로세스 등)
+   시공 후 VOC
+B2B 판매
+활성화 방향
+및 주력 모델
+선정
+Phase V
+Phase IV
+Phase III
+Phase II
+Phase I
+스타일러 판매
+Bottleneck 가설 수립 | B2C 소비자 조사 | B2B 소비자 조사 | 소비자 검증 | 전략 수립
+
+[슬라이드 8]
+8
+Consulting Framework
+Co-workshop과 B2C, B2B소비자 조사를 토대로 후속모델 Spec 결정 후 구입 의향자 대상의 Gang Survey,  B2B 관계사 인터뷰를 통해 최종 검증함.
+Phase V
+Phase IV
+Phase III
+Phase II
+Phase I
+스타일러 판매
+Bottleneck 가설 수립 | B2C 소비자 조사 | B2B 소비자 조사 | 소비자 검증 | 전략 수립
+주요조사 항목
+ - 기존 모델 대비 선호도 차이
+ - 기존 모델 대비 구매의향 차이
+ - 예상 Target 
+ - 신규 모델 출시 효과
+ - 판매량 예측 
+ - 자기 잠식 가능성 예상
+ - 기존 모델 대비 구매 Barrier score
+주요조사 항목
+ - 기존 모델 대비 선호도
+ - 기존 모델 대비 필요도
+ - 기존 모델 대비 구매의향
+구입 의향자 대상_ Gang Survey (n=60)
+B2B 관계자 _In Depth Interview (n=10)
+후속모델 
+Spec
+최종 검증
+
+[슬라이드 9]
+9
+Consulting Framework
+후속모델의 Spec 뿐 아니라 향후 경쟁을 고려한 중장기 제품 Portfolio 전략을 수립함.
+현업부서와(상기,R&D) Co-workshop을 통해 실행 가능한 전략 수립을 원칙으로 함.
+SS 상품전략Forecasting
+* 상기 Co-workshop
+가상제품별
+시장성과 Simulation
+* 상기 Co-workshop
+후속모델
+Spec 결정
+R&D우선순위 선정
+* 개발그룹&상기 Co-workshop
+Product Strategy
+(보강,강화,확장 의사결정)
+모델별 고객 
+Matching
+상품전략 外
+판매활성화 아이디어/전략 제언
+가상제품 구성
+크기/가격/기능/용량
+스타일러 판매 Bottleneck 규명
+Synergy 
+창출전략
+카니발 
+제어 전략
+Phase V
+Phase IV
+Phase III
+Phase II
+Phase I
+스타일러 판매
+Bottleneck 가설 수립 | B2C 소비자 조사 | B2B 소비자 조사 | 소비자 검증 | 전략 수립
+
+[슬라이드 10]
+10
+Schedule & Budget
+
+[슬라이드 11]
+11
+Schedule & Budget
+W1 | W2 | W3 | W4 | W5 | W6 | W7 | W8 | W9 | W10
+착수보고
+스타일러 판매
+Bottleneck 
+가설 수립 | 기존 조사자료 재분석
+판매사원 인터뷰
+Bottleneck 가설 수립
+B2C 
+소비자 조사 | 조사설계
+인터뷰 실사
+B2B 
+소비자 조사 | 조사설계
+인터뷰 실사
+중간보고
+후속모델 Spec 
+소비자 검증 | 조사설계
+실사 진행
+전략 수립 | 전략설계 및 수립 및 
+보고서 작성
+최종보고
+본 프로젝트 기간은 총 10주로 설계 되었으며, 3회의 사업부장 Presentation을 포함합니다.
+
+[슬라이드 12]
+12
+본 Project는 총 10주 동안 진행되며,  총 105백만원이 소요됩니다.
+(단위 : 원, 부가세 별도)
+Schedule & Budget
+구분 | Role | Level | Fee/Day(원) | Day | Week | ParticipationRate | 정상 금액 | 할인 금액
+Consulting | Project 
+Director | CEO | 3,000,000 | 5 | 10 | 15% | 22,500,000 | 12% D/C 적용
+Project 
+Manager | 이사 | 1,300,000 | 5 | 10 | 50% | 30,000,000
+실무담당 | 차장 | 800,000 | 5 | 10 | 50% | 20,000,000
+실무담당 | 대리 | 600,000 | 5 | 10 | 100% | 20,000,000
+Assistant | 사원 | 350,000 | 5 | 10 | 100% | 10,000,000
+컨설팅 비용 합계 | 102,500,000 | 90,000,000
+Research | 판매원 인터뷰 5人 / 소비자 인터뷰 30명 / B2B 관계자 20명 / Gang Survey 60명 | 15,000,000
+리서치 비용 합계 | 15,000,000
+합 계 | 105,000,000
+
+[슬라이드 13]
+보다 상세한 정보가 필요하실 경우에는  
+아래 연락처로 문의해 주시기 바랍니다.
+www.wkmg.co.kr
+wkmg@wkmg.co.kr
+Tel) 02-571-7738
