@@ -89,15 +89,16 @@ GRADE_ORDER = {"S": 0, "A": 1, "B": 2, "C": 3}
 # ★ 차세대 API: /ad/BidPublicInfoService/ (R26BK... 공고번호 지원)
 # ★ 구 API: /BidPublicInfoService04/ (구 공고번호만 지원 — fallback용)
 G2B_FILE_URLS = {
-    # 1순위: 차세대 나라장터 — e발주 첨부파일정보조회 (통합)
-    "eorder": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoEorderAtchFileInfo",
-    # 2순위: 차세대 혁신장터 최종제안요청서 교부 첨부파일정보조회
-    "innov_rfp": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListPPIFnlRfpIssAtchFileInfo",
-    # 3순위: 구 나라장터 API (fallback — 구 공고번호용)
-    "servc_old":  "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoServcFile",
-    "thng_old":   "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile",
+    # ── 차세대 나라장터 공고정보 조회 API (ntceSpecDocUrl1~10에 첨부파일 포함) ──
+    "servc":    "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoServc",
+    "thng":     "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoThng",
+    "cnstwk":   "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoCnstwk",
+    "frgcpt":   "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoFrgcpt",
+    "etc":      "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoEtc",
+    # ── 차세대 첨부파일 전용 API (e발주 첨부) ──
+    "eorder":   "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoEorderAtchFileInfo",
+    "innov_rfp":"https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListPPIFnlRfpIssAtchFileInfo",
 }
-G2B_FILE_URL_DEFAULT = G2B_FILE_URLS["eorder"]  # 기본값: 차세대 e발주 첨부파일
 
 def find_latest_report(data_dir: str) -> Optional[str]:
     """rfp_radar/data/daily_reports에서 최신 추천 리포트 찾기
@@ -197,19 +198,29 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
     
     timeout = config.get("download_timeout", 30)
     
-    # 차세대 API 우선 시도 → 구 API fallback
-    # 혁신장터 제안요청서 첨부파일도 시도
-    api_try_order = ["eorder", "innov_rfp", "servc_old", "thng_old"]
+    # 1단계: 용역 공고정보에서 ntceSpecDocUrl 추출 (가장 확실)
+    api_try_order = ["servc", "thng", "cnstwk", "frgcpt", "etc"]
     
     for api_type in api_try_order:
-        api_url = G2B_FILE_URLS.get(api_type, G2B_FILE_URL_DEFAULT)
-        downloaded = _try_download_from_api(bid_no, api_url, api_type, bid_dir, service_key, timeout, config)
+        api_url = G2B_FILE_URLS.get(api_type)
+        downloaded = _try_download_from_bid_info(bid_no, api_url, api_type, bid_dir, service_key, timeout)
         
         if downloaded:
-            log.info(f"    ✅ {api_type} API로 {len(downloaded)}개 파일 다운로드 성공")
+            log.info(f"    ✅ {api_type} 공고정보에서 {len(downloaded)}개 파일 다운로드 성공")
             return downloaded
         else:
-            log.debug(f"    - {api_type} API: 파일 없음")
+            log.debug(f"    - {api_type}: 해당 없음")
+    
+    # 2단계: e발주 전용 첨부파일 API
+    for api_type in ["eorder", "innov_rfp"]:
+        api_url = G2B_FILE_URLS.get(api_type)
+        downloaded = _try_download_from_atch_api(bid_no, api_url, api_type, bid_dir, service_key, timeout)
+        
+        if downloaded:
+            log.info(f"    ✅ {api_type} 첨부API에서 {len(downloaded)}개 파일 다운로드 성공")
+            return downloaded
+        else:
+            log.debug(f"    - {api_type} 첨부API: 파일 없음")
     
     # 모든 API에서 실패 — 차세대 나라장터 직접 크롤링 시도
     log.info(f"  🔄 G2B API 첨부파일 없음 → 나라장터 웹 직접 시도...")
@@ -222,151 +233,139 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
     return []
 
 
-def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
-                           bid_dir: str, service_key: str, 
-                           timeout: int, config: Dict) -> List[Dict]:
-    """단일 API endpoint에서 첨부파일 다운로드 시도"""
+def _try_download_from_bid_info(bid_no: str, api_url: str, api_type: str,
+                                bid_dir: str, service_key: str, timeout: int) -> List[Dict]:
+    """공고정보 조회 API에서 ntceSpecDocUrl1~10 추출하여 파일 다운로드"""
     downloaded = []
-    
-    # 차세대 API는 fileSeq 없이 한 번에 전체 목록 반환
-    # 구 API는 fileSeq로 순차 조회
-    is_new_api = "/ad/" in api_url
-    
-    if is_new_api:
-        # ── 차세대 나라장터 API ──
-        params = {
-            "serviceKey": service_key,
-            "pageNo": "1",
-            "numOfRows": "100",
-            "type": "json",
-            "inqryDiv": "1",
-            "bidNtceNo": bid_no,
-        }
-        try:
-            resp = requests.get(api_url, params=params, timeout=timeout)
-            if resp.status_code != 200:
-                log.debug(f"    - [{api_type}] HTTP {resp.status_code}")
-                return []
-            
-            data = resp.json()
-            
-            # 차세대 응답 구조: { "header": {...}, "body": { "items": [...], "totalCount": N } }
-            # 또는: { "response": { "header": {...}, "body": {...} } }
-            body = data.get("body", {})
-            if not body:
-                body = data.get("response", {}).get("body", {})
-            
-            total_count = int(body.get("totalCount", 0))
-            if total_count == 0:
-                log.debug(f"    - [{api_type}] totalCount=0")
-                return []
-            
-            item_list = body.get("items", [])
-            if isinstance(item_list, dict):
-                item_list = item_list.get("item", [])
-            if isinstance(item_list, dict):
-                item_list = [item_list]
-            items = item_list if isinstance(item_list, list) else []
-            
-            log.info(f"    📋 [{api_type}] {len(items)}개 첨부파일 발견 (totalCount={total_count})")
-            
-            for item in items:
-                # 차세대 필드: eorderAtchFileUrl, eorderAtchFileNm
-                # 구 필드 fallback: fileUrl, pblancAtchFileUrl
-                file_url = (item.get("eorderAtchFileUrl") or 
-                           item.get("fileUrl") or 
-                           item.get("pblancAtchFileUrl") or "")
-                file_name = (item.get("eorderAtchFileNm") or 
-                            item.get("fileNm") or 
-                            item.get("pblancAtchFileNm") or 
-                            f"file_{item.get('atchSno', '0')}")
-                
-                if not file_url:
-                    continue
-                
-                file_path = os.path.join(bid_dir, file_name)
-                try:
-                    file_resp = requests.get(file_url, timeout=timeout)
-                    if file_resp.status_code == 200 and len(file_resp.content) > 100:
-                        with open(file_path, "wb") as f:
-                            f.write(file_resp.content)
-                        downloaded.append({
-                            "file_name": file_name,
-                            "file_path": file_path,
-                            "file_size": len(file_resp.content),
-                            "file_seq": item.get("atchSno", 0),
-                            "api_type": api_type,
-                            "doc_type": item.get("eorderDocDivNm", ""),
-                        })
-                        log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
-                except Exception as e:
-                    log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
-                    
-        except Exception as e:
-            log.debug(f"    - [{api_type}] 요청 실패: {e}")
+    params = {
+        "serviceKey": service_key,
+        "pageNo": "1",
+        "numOfRows": "10",
+        "type": "json",
+        "inqryDiv": "2",
+        "bidNtceNo": bid_no,
+    }
+    try:
+        resp = requests.get(api_url, params=params, timeout=timeout)
+        if resp.status_code != 200:
+            return []
         
-        return downloaded
+        data = resp.json()
+        body = data.get("response", {}).get("body", {})
+        total_count = int(body.get("totalCount", 0))
+        if total_count == 0:
+            return []
+        
+        # items에서 첫 번째 아이템
+        item_list = body.get("items", [])
+        if isinstance(item_list, dict):
+            item_list = item_list.get("item", [])
+        if isinstance(item_list, dict):
+            item_list = [item_list]
+        if not item_list:
+            return []
+        
+        item = item_list[0] if isinstance(item_list, list) else item_list
+        
+        # ntceSpecDocUrl1~10, ntceSpecFileNm1~10 추출
+        for seq in range(1, 11):
+            file_url = item.get(f"ntceSpecDocUrl{seq}", "")
+            file_name = item.get(f"ntceSpecFileNm{seq}", "")
+            
+            if not file_url:
+                continue
+            if not file_name:
+                file_name = f"ntceSpec_{seq}"
+            
+            file_path = os.path.join(bid_dir, file_name)
+            try:
+                file_resp = requests.get(file_url, timeout=timeout)
+                if file_resp.status_code == 200 and len(file_resp.content) > 100:
+                    with open(file_path, "wb") as f:
+                        f.write(file_resp.content)
+                    downloaded.append({
+                        "file_name": file_name,
+                        "file_path": file_path,
+                        "file_size": len(file_resp.content),
+                        "file_seq": seq,
+                        "api_type": api_type,
+                    })
+                    log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
+            except Exception as e:
+                log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
     
-    # ── 구 나라장터 API (fileSeq 순차 조회) ──
-    max_seq = config.get("max_file_seq", 20)
+    except Exception as e:
+        log.debug(f"    - [{api_type}] 요청 실패: {e}")
     
-    for seq in range(1, max_seq + 1):
-        params = {
-            "ServiceKey": service_key,
-            "inqryDiv": "1",
-            "bidNtceNo": bid_no,
-            "bidNtceOrd": "00",
-            "fileSeq": str(seq),
-            "type": "json",
-        }
-        try:
-            resp = requests.get(api_url, params=params, timeout=timeout)
-            if resp.status_code != 200:
+    return downloaded
+
+
+def _try_download_from_atch_api(bid_no: str, api_url: str, api_type: str,
+                                bid_dir: str, service_key: str, timeout: int) -> List[Dict]:
+    """e발주/혁신장터 첨부파일 전용 API에서 다운로드"""
+    downloaded = []
+    params = {
+        "serviceKey": service_key,
+        "pageNo": "1",
+        "numOfRows": "100",
+        "type": "json",
+        "inqryDiv": "2",
+        "bidNtceNo": bid_no,
+    }
+    try:
+        resp = requests.get(api_url, params=params, timeout=timeout)
+        if resp.status_code != 200:
+            return []
+        
+        data = resp.json()
+        body = data.get("response", {}).get("body", {})
+        total_count = int(body.get("totalCount", 0))
+        if total_count == 0:
+            return []
+        
+        item_list = body.get("items", [])
+        if isinstance(item_list, dict):
+            item_list = item_list.get("item", [])
+        if isinstance(item_list, dict):
+            item_list = [item_list]
+        items = item_list if isinstance(item_list, list) else []
+        
+        log.info(f"    📋 [{api_type}] {len(items)}개 첨부파일 발견")
+        
+        for item in items:
+            file_url = (item.get("eorderAtchFileUrl") or 
+                       item.get("fileUrl") or 
+                       item.get("pblancAtchFileUrl") or "")
+            file_name = (item.get("eorderAtchFileNm") or 
+                        item.get("fileNm") or 
+                        item.get("pblancAtchFileNm") or 
+                        f"file_{item.get('atchSno', '0')}")
+            
+            if not file_url:
                 continue
             
-            data = resp.json()
-            
-            # 구 API 응답 구조: { "response": { "body": {...} } }
-            body = data.get("response", {}).get("body", {})
-            total_count = body.get("totalCount", 0)
-            
-            item_list = body.get("items", [])
-            if isinstance(item_list, dict):
-                item_list = item_list.get("item", [])
-            if isinstance(item_list, dict):
-                item_list = [item_list]
-            items = item_list if isinstance(item_list, list) else []
-            
-            if not items:
-                if seq == 1 and total_count == 0:
-                    break
-                if seq > 3:
-                    break
-                continue
-            
-            for item in items:
-                file_url = item.get("fileUrl", item.get("pblancAtchFileUrl", ""))
-                file_name = item.get("fileNm", item.get("pblancAtchFileNm", f"file_{seq}"))
+            file_path = os.path.join(bid_dir, file_name)
+            try:
+                file_resp = requests.get(file_url, timeout=timeout)
+                if file_resp.status_code == 200 and len(file_resp.content) > 100:
+                    with open(file_path, "wb") as f:
+                        f.write(file_resp.content)
+                    downloaded.append({
+                        "file_name": file_name,
+                        "file_path": file_path,
+                        "file_size": len(file_resp.content),
+                        "file_seq": item.get("atchSno", 0),
+                        "api_type": api_type,
+                        "doc_type": item.get("eorderDocDivNm", ""),
+                    })
+                    log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
+            except Exception as e:
+                log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
                 
-                if not file_url:
-                    continue
-                
-                file_path = os.path.join(bid_dir, file_name)
-                try:
-                    file_resp = requests.get(file_url, timeout=timeout)
-                    if file_resp.status_code == 200 and len(file_resp.content) > 100:
-                        with open(file_path, "wb") as f:
-                            f.write(file_resp.content)
-                        downloaded.append({
-                            "file_name": file_name,
-                            "file_path": file_path,
-                            "file_size": len(file_resp.content),
-                            "file_seq": seq,
-                            "api_type": api_type,
-                        })
-                        log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
-                except Exception as e:
-                    log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
+    except Exception as e:
+        log.debug(f"    - [{api_type}] 요청 실패: {e}")
+    
+    return downloaded
                     
         except Exception as e:
             if seq > 3:
