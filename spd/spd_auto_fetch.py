@@ -85,14 +85,23 @@ GRADE_ORDER = {"S": 0, "A": 1, "B": 2, "C": 3}
 # G2B 첨부파일 다운로드
 # ═══════════════════════════════════════════════════════════════
 
-# G2B 첨부파일 API — 업무유형별 URL (물품/용역/공사/외자)
+# G2B 첨부파일 API — 차세대 나라장터 (2025.1.6~) + 구 API fallback
+# ★ 차세대 API: /ad/BidPublicInfoService/ (R26BK... 공고번호 지원)
+# ★ 구 API: /BidPublicInfoService04/ (구 공고번호만 지원 — fallback용)
 G2B_FILE_URLS = {
-    "servc": "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoServcFile",   # 용역 (WKMG 주력)
-    "thng":  "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile",    # 물품
-    "cnstwk":"https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoCnstwkFile",  # 공사
-    "frgcpt":"https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoFrgcptFile",  # 외자
+    # 1순위: 차세대 나라장터 API (전자발주 첨부파일 — 통합)
+    "eorder": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoEOrderAtchFile",
+    # 2순위: 차세대 혁신장터 제안요청서 첨부파일
+    "innov_rfp": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoInnovMrktRfPAtchFile",
+    # 3순위: 차세대 업무유형별
+    "servc_new":  "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoServcFile",
+    "thng_new":   "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoThngFile",
+    "cnstwk_new": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoCnstwkFile",
+    # 3순위: 구 나라장터 API (fallback — 구 공고번호용)
+    "servc_old":  "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoServcFile",
+    "thng_old":   "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile",
 }
-G2B_FILE_URL_DEFAULT = G2B_FILE_URLS["servc"]  # 기본값: 용역
+G2B_FILE_URL_DEFAULT = G2B_FILE_URLS["eorder"]  # 기본값: 차세대 통합 첨부파일
 
 def find_latest_report(data_dir: str) -> Optional[str]:
     """rfp_radar/data/daily_reports에서 최신 추천 리포트 찾기
@@ -192,8 +201,9 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
     
     timeout = config.get("download_timeout", 30)
     
-    # 업무유형 시도 순서: 용역(주력) → 물품 → 공사 → 외자
-    api_try_order = ["servc", "thng", "cnstwk", "frgcpt"]
+    # 차세대 API 우선 시도 → 구 API fallback
+    # 혁신장터 제안요청서 첨부파일도 시도
+    api_try_order = ["eorder", "innov_rfp", "servc_new", "thng_new", "cnstwk_new", "servc_old", "thng_old"]
     
     for api_type in api_try_order:
         api_url = G2B_FILE_URLS.get(api_type, G2B_FILE_URL_DEFAULT)
@@ -212,7 +222,7 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
         log.info(f"    ✅ 웹 크롤링으로 {len(downloaded)}개 파일 다운로드 성공")
         return downloaded
     
-    log.warning(f"  ❌ 첨부파일 다운로드 실패 (4개 API + 웹 모두 실패)")
+    log.warning(f"  ❌ 첨부파일 다운로드 실패 (차세대+구 API + 웹 모두 실패)")
     return []
 
 
