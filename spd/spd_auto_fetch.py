@@ -227,6 +227,87 @@ def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
                            timeout: int, config: Dict) -> List[Dict]:
     """단일 API endpoint에서 첨부파일 다운로드 시도"""
     downloaded = []
+    
+    # 차세대 API는 fileSeq 없이 한 번에 전체 목록 반환
+    # 구 API는 fileSeq로 순차 조회
+    is_new_api = "/ad/" in api_url
+    
+    if is_new_api:
+        # ── 차세대 나라장터 API ──
+        params = {
+            "serviceKey": service_key,
+            "pageNo": "1",
+            "numOfRows": "100",
+            "type": "json",
+            "inqryDiv": "1",
+            "bidNtceNo": bid_no,
+        }
+        try:
+            resp = requests.get(api_url, params=params, timeout=timeout)
+            if resp.status_code != 200:
+                log.debug(f"    - [{api_type}] HTTP {resp.status_code}")
+                return []
+            
+            data = resp.json()
+            
+            # 차세대 응답 구조: { "header": {...}, "body": { "items": [...], "totalCount": N } }
+            # 또는: { "response": { "header": {...}, "body": {...} } }
+            body = data.get("body", {})
+            if not body:
+                body = data.get("response", {}).get("body", {})
+            
+            total_count = int(body.get("totalCount", 0))
+            if total_count == 0:
+                log.debug(f"    - [{api_type}] totalCount=0")
+                return []
+            
+            item_list = body.get("items", [])
+            if isinstance(item_list, dict):
+                item_list = item_list.get("item", [])
+            if isinstance(item_list, dict):
+                item_list = [item_list]
+            items = item_list if isinstance(item_list, list) else []
+            
+            log.info(f"    📋 [{api_type}] {len(items)}개 첨부파일 발견 (totalCount={total_count})")
+            
+            for item in items:
+                # 차세대 필드: eorderAtchFileUrl, eorderAtchFileNm
+                # 구 필드 fallback: fileUrl, pblancAtchFileUrl
+                file_url = (item.get("eorderAtchFileUrl") or 
+                           item.get("fileUrl") or 
+                           item.get("pblancAtchFileUrl") or "")
+                file_name = (item.get("eorderAtchFileNm") or 
+                            item.get("fileNm") or 
+                            item.get("pblancAtchFileNm") or 
+                            f"file_{item.get('atchSno', '0')}")
+                
+                if not file_url:
+                    continue
+                
+                file_path = os.path.join(bid_dir, file_name)
+                try:
+                    file_resp = requests.get(file_url, timeout=timeout)
+                    if file_resp.status_code == 200 and len(file_resp.content) > 100:
+                        with open(file_path, "wb") as f:
+                            f.write(file_resp.content)
+                        downloaded.append({
+                            "file_name": file_name,
+                            "file_path": file_path,
+                            "file_size": len(file_resp.content),
+                            "file_seq": item.get("atchSno", 0),
+                            "api_type": api_type,
+                            "doc_type": item.get("eorderDocDivNm", ""),
+                        })
+                        log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
+                except Exception as e:
+                    log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
+                    
+        except Exception as e:
+            log.debug(f"    - [{api_type}] 요청 실패: {e}")
+        
+        return downloaded
+    
+    # ── 구 나라장터 API (fileSeq 순차 조회) ──
     max_seq = config.get("max_file_seq", 20)
     
     for seq in range(1, max_seq + 1):
@@ -245,7 +326,7 @@ def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
             
             data = resp.json()
             
-            # API 응답 파싱
+            # 구 API 응답 구조: { "response": { "body": {...} } }
             body = data.get("response", {}).get("body", {})
             total_count = body.get("totalCount", 0)
             
@@ -258,7 +339,6 @@ def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
             
             if not items:
                 if seq == 1 and total_count == 0:
-                    # 첫 시도에서 totalCount=0이면 이 API에는 해당 공고 없음
                     break
                 if seq > 3:
                     break
@@ -271,7 +351,6 @@ def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
                 if not file_url:
                     continue
                 
-                # 파일 다운로드
                 file_path = os.path.join(bid_dir, file_name)
                 try:
                     file_resp = requests.get(file_url, timeout=timeout)
