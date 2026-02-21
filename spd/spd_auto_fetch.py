@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 SPD Phase 1-A: Auto-Fetch Engine
@@ -88,18 +88,37 @@ GRADE_ORDER = {"S": 0, "A": 1, "B": 2, "C": 3}
 G2B_FILE_URL = "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile"
 
 def find_latest_report(data_dir: str) -> Optional[str]:
-    """rfp_radar/data/daily_reports에서 최신 JSON 리포트 찾기"""
-    patterns = [
+    """rfp_radar/data/daily_reports에서 최신 추천 리포트 찾기
+    우선순위: recommend > rfp_report > report > candidates > 기타
+    """
+    # 1순위: recommend 파일 (S/A등급 추천 공고 — 이미 등급 필터링 완료)
+    priority_patterns = [
+        os.path.join(data_dir, "v83_recommend_*.json"),
+        os.path.join(data_dir, "v*_recommend_*.json"),
         os.path.join(data_dir, "rfp_report_*.json"),
         os.path.join(data_dir, "report_*.json"),
-        os.path.join(data_dir, "*.json"),
     ]
-    all_files = []
-    for p in patterns:
-        all_files.extend(glob.glob(p))
+    for p in priority_patterns:
+        files = glob.glob(p)
+        if files:
+            chosen = max(files, key=os.path.getmtime)
+            log.info(f"   📄 선택된 리포트: {os.path.basename(chosen)}")
+            return chosen
+    
+    # 2순위: candidates 파일 (전체 후보 — 등급 필터 필요)
+    candidates = glob.glob(os.path.join(data_dir, "v83_candidates_*.json"))
+    if candidates:
+        chosen = max(candidates, key=os.path.getmtime)
+        log.info(f"   📄 선택된 리포트 (candidates): {os.path.basename(chosen)}")
+        return chosen
+    
+    # 3순위: 아무 JSON
+    all_files = glob.glob(os.path.join(data_dir, "*.json"))
     if not all_files:
         return None
-    return max(all_files, key=os.path.getmtime)
+    chosen = max(all_files, key=os.path.getmtime)
+    log.info(f"   📄 선택된 리포트 (fallback): {os.path.basename(chosen)}")
+    return chosen
 
 def load_report(report_path: str) -> List[Dict]:
     """RFP Radar 리포트에서 공고 목록 로드"""
@@ -134,8 +153,12 @@ def filter_bids(bids: List[Dict], min_grade: str = "A",
             filtered.append(bid)
             continue
         
-        # 등급 필터
-        grade = bid.get("grade", bid.get("rfp_grade", "C"))
+        # 등급 필터 (다양한 리포트 형식 지원)
+        grade = bid.get("grade", bid.get("rfp_grade", ""))
+        if not grade and isinstance(bid.get("score"), dict):
+            grade = bid["score"].get("grade", "")
+        if not grade:
+            grade = "C"
         if GRADE_ORDER.get(grade, 3) > min_grade_idx:
             continue
         
@@ -336,9 +359,11 @@ def process_bid(bid: Dict, config: Dict, dry_run: bool = False) -> Dict:
     """단일 공고 처리: 다운로드 → 추출 → 결과 저장"""
     bid_no = str(bid.get("bid_no", bid.get("bidNtceNo", "unknown")))
     title = bid.get("title", bid.get("bidNtceNm", ""))
-    grade = bid.get("grade", bid.get("rfp_grade", "?"))
+    grade = bid.get("grade", bid.get("rfp_grade", ""))
+    if not grade and isinstance(bid.get("score"), dict):
+        grade = bid["score"].get("grade", "?")
     agency = bid.get("agency", bid.get("dminsttNm", ""))
-    budget = bid.get("budget_str", bid.get("presmptPrce", ""))
+    budget = bid.get("budget_str", bid.get("budget", bid.get("presmptPrce", "")))
     
     log.info(f"\n{'='*60}")
     log.info(f"📋 [{grade}] {title}")
@@ -426,16 +451,22 @@ def run_auto_fetch(args):
         log.info(f"   기대 경로: {config.get('rfp_radar_data_dir', '?')}")
         return
     
-    log.info(f"📂 리포트: {os.path.basename(report_path)}")
+    report_name = os.path.basename(report_path)
+    log.info(f"📂 리포트: {report_name}")
     bids = load_report(report_path)
     log.info(f"   전체 공고: {len(bids)}건")
     
-    # 필터링
-    min_grade = args.grade or config.get("min_grade", "A")
-    target_sources = config.get("target_sources", None)
-    filtered = filter_bids(bids, min_grade, target_sources, args.bid)
+    # recommend 파일이면 필터 없이 전부 분석 대상 (이미 RFP Radar가 추천한 공고)
+    is_recommend = "recommend" in report_name.lower()
     
-    log.info(f"   대상 공고: {filtered and len(filtered) or 0}건 (등급 {min_grade}+ 필터)")
+    if is_recommend and not args.bid:
+        filtered = bids
+        log.info(f"   📌 추천 리포트 → 전체 {len(filtered)}건 분석 대상 (필터 스킵)")
+    else:
+        min_grade = args.grade or config.get("min_grade", "A")
+        target_sources = config.get("target_sources", None)
+        filtered = filter_bids(bids, min_grade, target_sources, args.bid)
+        log.info(f"   대상 공고: {filtered and len(filtered) or 0}건 (등급 {min_grade}+ 필터)")
     
     if not filtered:
         log.info("✅ 대상 공고 없음. 종료.")
