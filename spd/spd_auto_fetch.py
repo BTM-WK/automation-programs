@@ -85,7 +85,14 @@ GRADE_ORDER = {"S": 0, "A": 1, "B": 2, "C": 3}
 # G2B 첨부파일 다운로드
 # ═══════════════════════════════════════════════════════════════
 
-G2B_FILE_URL = "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile"
+# G2B 첨부파일 API — 업무유형별 URL (물품/용역/공사/외자)
+G2B_FILE_URLS = {
+    "servc": "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoServcFile",   # 용역 (WKMG 주력)
+    "thng":  "https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoThngFile",    # 물품
+    "cnstwk":"https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoCnstwkFile",  # 공사
+    "frgcpt":"https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoFrgcptFile",  # 외자
+}
+G2B_FILE_URL_DEFAULT = G2B_FILE_URLS["servc"]  # 기본값: 용역
 
 def find_latest_report(data_dir: str) -> Optional[str]:
     """rfp_radar/data/daily_reports에서 최신 추천 리포트 찾기
@@ -173,7 +180,7 @@ def filter_bids(bids: List[Dict], min_grade: str = "A",
     return filtered
 
 def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
-    """G2B API로 공고 첨부파일 다운로드"""
+    """G2B API로 공고 첨부파일 다운로드 (용역 우선, 실패 시 물품/공사/외자 순차 시도)"""
     service_key = config.get("service_key", os.environ.get("RFP_SERVICE_KEY", ""))
     if not service_key:
         log.warning(f"  ⚠️ G2B API 키 없음 — 첨부파일 다운로드 스킵")
@@ -183,9 +190,38 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
     bid_dir = os.path.join(download_dir, str(bid_no))
     os.makedirs(bid_dir, exist_ok=True)
     
+    timeout = config.get("download_timeout", 30)
+    
+    # 업무유형 시도 순서: 용역(주력) → 물품 → 공사 → 외자
+    api_try_order = ["servc", "thng", "cnstwk", "frgcpt"]
+    
+    for api_type in api_try_order:
+        api_url = G2B_FILE_URLS.get(api_type, G2B_FILE_URL_DEFAULT)
+        downloaded = _try_download_from_api(bid_no, api_url, api_type, bid_dir, service_key, timeout, config)
+        
+        if downloaded:
+            log.info(f"    ✅ {api_type} API로 {len(downloaded)}개 파일 다운로드 성공")
+            return downloaded
+        else:
+            log.debug(f"    - {api_type} API: 파일 없음")
+    
+    # 모든 API에서 실패 — 차세대 나라장터 직접 크롤링 시도
+    log.info(f"  🔄 G2B API 첨부파일 없음 → 나라장터 웹 직접 시도...")
+    downloaded = _try_download_from_g2b_web(bid_no, bid_dir, timeout)
+    if downloaded:
+        log.info(f"    ✅ 웹 크롤링으로 {len(downloaded)}개 파일 다운로드 성공")
+        return downloaded
+    
+    log.warning(f"  ❌ 첨부파일 다운로드 실패 (4개 API + 웹 모두 실패)")
+    return []
+
+
+def _try_download_from_api(bid_no: str, api_url: str, api_type: str,
+                           bid_dir: str, service_key: str, 
+                           timeout: int, config: Dict) -> List[Dict]:
+    """단일 API endpoint에서 첨부파일 다운로드 시도"""
     downloaded = []
     max_seq = config.get("max_file_seq", 20)
-    timeout = config.get("download_timeout", 30)
     
     for seq in range(1, max_seq + 1):
         params = {
@@ -197,15 +233,16 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
             "type": "json",
         }
         try:
-            resp = requests.get(G2B_FILE_URL, params=params, timeout=timeout)
+            resp = requests.get(api_url, params=params, timeout=timeout)
             if resp.status_code != 200:
                 continue
             
             data = resp.json()
-            items = []
             
             # API 응답 파싱
             body = data.get("response", {}).get("body", {})
+            total_count = body.get("totalCount", 0)
+            
             item_list = body.get("items", [])
             if isinstance(item_list, dict):
                 item_list = item_list.get("item", [])
@@ -214,7 +251,10 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
             items = item_list if isinstance(item_list, list) else []
             
             if not items:
-                if seq > 3:  # 3번긌지는 시도, 이후 빈 응답이면 중단
+                if seq == 1 and total_count == 0:
+                    # 첫 시도에서 totalCount=0이면 이 API에는 해당 공고 없음
+                    break
+                if seq > 3:
                     break
                 continue
             
@@ -237,8 +277,9 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
                             "file_path": file_path,
                             "file_size": len(file_resp.content),
                             "file_seq": seq,
+                            "api_type": api_type,
                         })
-                        log.info(f"    📥 {file_name} ({len(file_resp.content):,}B)")
+                        log.info(f"    📥 [{api_type}] {file_name} ({len(file_resp.content):,}B)")
                 except Exception as e:
                     log.warning(f"    ⚠️ 다운로드 실패: {file_name} — {e}")
                     
@@ -246,6 +287,76 @@ def download_g2b_files(bid_no: str, config: Dict) -> List[Dict]:
             if seq > 3:
                 break
             continue
+    
+    return downloaded
+
+
+def _try_download_from_g2b_web(bid_no: str, bid_dir: str, timeout: int) -> List[Dict]:
+    """차세대 나라장터 웹에서 직접 첨부파일 다운로드 시도 (API 실패 시 fallback)"""
+    downloaded = []
+    
+    try:
+        # 차세대 나라장터 공고 상세 페이지에서 첨부파일 링크 추출
+        detail_url = f"https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo={bid_no}&bidPbancOrd=00"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        resp = requests.get(detail_url, headers=headers, timeout=timeout, allow_redirects=True)
+        
+        if resp.status_code != 200:
+            return []
+        
+        html = resp.text
+        
+        # 첨부파일 다운로드 URL 패턴 추출 (차세대 나라장터)
+        import re
+        # 패턴 1: fileDownload 링크
+        file_patterns = re.findall(
+            r'href=["\']([^"\']*(?:fileDownload|atchFileDown|download)[^"\']*)["\']',
+            html, re.IGNORECASE
+        )
+        # 패턴 2: 첨부파일 직접 URL
+        file_patterns += re.findall(
+            r'href=["\']([^"\']*\.(?:hwp|hwpx|pdf|doc|docx|xlsx|xls|zip)[^"\']*)["\']',
+            html, re.IGNORECASE
+        )
+        
+        if not file_patterns:
+            return []
+        
+        for i, file_url in enumerate(file_patterns[:10]):  # 최대 10개
+            if not file_url.startswith("http"):
+                file_url = "https://www.g2b.go.kr" + file_url
+            
+            try:
+                file_resp = requests.get(file_url, headers=headers, timeout=timeout, allow_redirects=True)
+                if file_resp.status_code == 200 and len(file_resp.content) > 100:
+                    # Content-Disposition에서 파일명 추출
+                    cd = file_resp.headers.get("Content-Disposition", "")
+                    file_name = f"web_file_{i+1}"
+                    if "filename" in cd:
+                        name_match = re.search(r'filename[*]?=["\']?(?:UTF-8\'\')?([^"\';\n]+)', cd)
+                        if name_match:
+                            from urllib.parse import unquote
+                            file_name = unquote(name_match.group(1).strip())
+                    
+                    file_path = os.path.join(bid_dir, file_name)
+                    with open(file_path, "wb") as f:
+                        f.write(file_resp.content)
+                    downloaded.append({
+                        "file_name": file_name,
+                        "file_path": file_path,
+                        "file_size": len(file_resp.content),
+                        "file_seq": i + 1,
+                        "api_type": "web_crawl",
+                    })
+                    log.info(f"    📥 [웹] {file_name} ({len(file_resp.content):,}B)")
+            except Exception:
+                continue
+                
+    except Exception as e:
+        log.debug(f"    웹 크롤링 실패: {e}")
     
     return downloaded
 
