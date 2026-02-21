@@ -73,7 +73,7 @@ jobs:
           RFP_SERVICE_KEY: ${{ secrets.RFP_SERVICE_KEY }}
         working-directory: spd
         run: |
-          GRADE="${{ github.event.inputs.min_grade || 'A' }}"
+          GRADE="${{ github.event.inputs.min_grade || 'B' }}"
           BID="${{ github.event.inputs.specific_bid || '' }}"
           
           CMD="python spd_auto_fetch.py --grade $GRADE"
