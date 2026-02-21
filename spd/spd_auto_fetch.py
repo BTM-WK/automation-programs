@@ -366,13 +366,6 @@ def _try_download_from_atch_api(bid_no: str, api_url: str, api_type: str,
         log.debug(f"    - [{api_type}] 요청 실패: {e}")
     
     return downloaded
-                    
-        except Exception as e:
-            if seq > 3:
-                break
-            continue
-    
-    return downloaded
 
 
 def _try_download_from_g2b_web(bid_no: str, bid_dir: str, timeout: int) -> List[Dict]:
