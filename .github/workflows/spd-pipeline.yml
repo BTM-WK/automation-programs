@@ -99,7 +99,34 @@ jobs:
           echo "🔬 Analysis: $CMD"
           eval $CMD
       
-      # 8. 결과 아카이브
+      # 8. Node.js 설정 (DOCX 생성용)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      # 9. DOCX 리포트 생성
+      - name: Generate DOCX Report
+        working-directory: spd
+        run: |
+          npm install docx
+          python spd_report.py --latest --stats-only
+          python spd_report.py --latest
+          echo "📄 DOCX 리포트 생성 완료"
+      
+      # 10. 이메일 발송
+      - name: Send Email Report
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          SPD_SMTP_SERVER: ${{ secrets.SPD_SMTP_SERVER }}
+          SPD_SENDER_EMAIL: ${{ secrets.SPD_SENDER_EMAIL }}
+          SPD_SENDER_PASSWORD: ${{ secrets.SPD_SENDER_PASSWORD }}
+        working-directory: spd
+        run: |
+          python spd_report.py --latest --email
+        continue-on-error: true
+      
+      # 11. 결과 아카이브
       - name: Archive SPD results
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,4 +135,5 @@ jobs:
           path: |
             spd/data/fetch_results/
             spd/data/analysis_results/
+            spd/data/reports/
           retention-days: 14

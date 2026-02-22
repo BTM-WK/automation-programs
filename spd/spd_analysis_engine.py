@@ -48,13 +48,19 @@ except ImportError:
     chromadb = None
     print("⚠️ chromadb 미설치 — 유사 프로젝트 매칭 비활성화")
 
-# v2 고도화 프롬프트 (있으면 사용, 없으면 내장 v1 fallback)
+# 프롬프트 버전 자동 감지: v3 → v2 → v1 (내장) fallback
 try:
-    from spd_prompts_v2 import SYSTEM_PROMPT_V2, build_analysis_prompt_v2
-    PROMPT_VERSION = "v2"
+    from spd_prompts_v3 import SYSTEM_PROMPT_V3, build_analysis_prompt_v3
+    PROMPT_VERSION = "v3"
+    print("✅ SPD Prompts v3.0 로드 (세부 과업 추출 + 차별화 채점)")
 except ImportError:
-    PROMPT_VERSION = "v1"
-    print("ℹ️ spd_prompts_v2.py 미발견 — 내장 v1 프롬프트 사용")
+    try:
+        from spd_prompts_v2 import SYSTEM_PROMPT_V2, build_analysis_prompt_v2
+        PROMPT_VERSION = "v2"
+        print("ℹ️ v3 미발견 → v2 프롬프트 사용")
+    except ImportError:
+        PROMPT_VERSION = "v1"
+        print("ℹ️ v2/v3 미발견 → 내장 v1 프롬프트 사용")
 
 # ---------------------------------------------------------------------------
 # 경로 & 설정
@@ -71,7 +77,7 @@ def load_config():
         "fetch_results_dir": os.path.join(SCRIPT_DIR, "data", "fetch_results"),
         "extracted_dir": os.path.join(SCRIPT_DIR, "data", "extracted"),
         "analysis_output_dir": os.path.join(SCRIPT_DIR, "data", "analysis_results"),
-        "max_context_chars": 12000,
+        "max_context_chars": 20000,   # v3 프롬프트에서 상세 분석을 위해 증가
         "top_similar_projects": 5,
         "temperature": 0.3,
     }
@@ -333,7 +339,10 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
     log.info(f"  🤖 GPT-4o 정밀분석 시작... (프롬프트: {PROMPT_VERSION})")
     start_time = time.time()
     
-    if PROMPT_VERSION == "v2":
+    if PROMPT_VERSION == "v3":
+        prompt = build_analysis_prompt_v3(bid_result, rfp_text, similar_projects)
+        gpt_result = call_gpt(SYSTEM_PROMPT_V3, prompt, config)
+    elif PROMPT_VERSION == "v2":
         prompt = build_analysis_prompt_v2(bid_result, rfp_text, similar_projects)
         gpt_result = call_gpt(SYSTEM_PROMPT_V2, prompt, config)
     else:
@@ -360,10 +369,21 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "status": "error" if "error" in gpt_result else "completed",
     }
     
-    # Go/No-Go 요약
-    go_decision = gpt_result.get("go_no_go", "UNKNOWN")
-    total_score = gpt_result.get("total_score", 0)
-    log.info(f"  📊 결과: {go_decision} ({total_score}점)")
+    # Go/No-Go 요약 (v3는 구조가 다름)
+    if PROMPT_VERSION == "v3":
+        go_section = gpt_result.get("go_no_go", {})
+        go_decision = go_section.get("decision", "UNKNOWN") if isinstance(go_section, dict) else str(go_section)
+        scoring = gpt_result.get("scoring", {})
+        total_score = scoring.get("total_score", 0) if isinstance(scoring, dict) else 0
+        # 세부 과업 분석 요약
+        deliv = gpt_result.get("deliverables_analysis", {})
+        deliv_count = deliv.get("total_deliverables", 0) if isinstance(deliv, dict) else 0
+        coverage = deliv.get("wkmg_coverage_pct", 0) if isinstance(deliv, dict) else 0
+        log.info(f"  📊 결과: {go_decision} ({total_score}점) | 세부과업 {deliv_count}개, WKMG 커버리지 {coverage}%")
+    else:
+        go_decision = gpt_result.get("go_no_go", "UNKNOWN")
+        total_score = gpt_result.get("total_score", 0)
+        log.info(f"  📊 결과: {go_decision} ({total_score}점)")
     
     return analysis
 
@@ -454,10 +474,16 @@ def run_analysis(args):
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
     
-    # 요약
-    go_count = sum(1 for a in analyses if a.get("analysis", {}).get("go_no_go") == "GO")
-    nogo_count = sum(1 for a in analyses if a.get("analysis", {}).get("go_no_go") == "NO-GO")
-    cond_count = sum(1 for a in analyses if a.get("analysis", {}).get("go_no_go") == "CONDITIONAL")
+    # 요약 (v3 구조 호환: go_no_go가 dict일 수 있음)
+    def _get_decision(a):
+        gng = a.get("analysis", {}).get("go_no_go", "UNKNOWN")
+        if isinstance(gng, dict):
+            return gng.get("decision", "UNKNOWN")
+        return str(gng)
+    
+    go_count = sum(1 for a in analyses if _get_decision(a) == "GO")
+    nogo_count = sum(1 for a in analyses if _get_decision(a) == "NO-GO")
+    cond_count = sum(1 for a in analyses if _get_decision(a) == "CONDITIONAL")
     
     log.info(f"\n{'='*60}")
     log.info(f"✅ SPD 분석 완료")
