@@ -66,7 +66,7 @@ async function generateReport(inputPath, outputPath) {
     const competitive = gpt.competitive_landscape || {};
     const totalScore = scoring.total_score || 0;
     const decision = typeof goNogo === "string" ? goNogo : (goNogo.decision || "UNKNOWN");
-    return { title: a.bid_title || basic.title || "제목 없음", bidNo: a.bid_number || "", agency: a.agency || "", budget: a.budget_text || "",
+    return { title: a.bid_title || a.title || basic.title || "제목 없음", bidNo: a.bid_number || a.bid_no || "", agency: a.agency || "", budget: a.budget_text || a.budget_str || "",
       totalScore, decision, grade: gradeLabel(totalScore), basic, scoring, goNogo, deliv, strategy, similar, competitive, fileCount: a.file_count || 0, rfpLength: a.rfp_text_length || 0 };
   });
 

@@ -166,9 +166,9 @@ def build_email_body(input_json):
         decision = go_nogo.get("decision", "UNKNOWN") if isinstance(go_nogo, dict) else str(go_nogo)
         coverage = deliv.get("wkmg_coverage_pct", 0) if isinstance(deliv, dict) else 0
         items.append({
-            "title": a.get("bid_title", "제목 없음"),
+            "title": a.get("bid_title") or a.get("title", "제목 없음"),
             "agency": a.get("agency", ""),
-            "budget": a.get("budget_text", ""),
+            "budget": a.get("budget_text") or a.get("budget_str", ""),
             "score": total_score,
             "decision": decision,
             "coverage": coverage
@@ -296,7 +296,7 @@ def generate_summary_stats(input_json):
         decision = go_nogo.get("decision", "UNKNOWN") if isinstance(go_nogo, dict) else str(go_nogo)
         coverage = deliv.get("wkmg_coverage_pct", 0) if isinstance(deliv, dict) else 0
         items.append({
-            "title": a.get("bid_title", "?"),
+            "title": a.get("bid_title") or a.get("title", "?"),
             "agency": a.get("agency", "?"),
             "score": total_score,
             "decision": decision,
