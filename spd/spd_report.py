@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPD Report Module v1.0 — DOCX 리포트 생성 + 이메일 발송
-=========================================================
+SPD Report Module v3.0 — DOCX 리포트 생성 + Gmail 호환 이메일 발송
+===================================================================
 spd_analysis_engine.py의 JSON 결과를 DOCX 리포트로 변환하고 이메일 발송.
+v3: Gmail/Outlook 호환 table-based 레이아웃
 
 사용법:
   python spd_report.py --input data/analysis_results/analysis_20260222.json
@@ -15,7 +16,7 @@ spd_analysis_engine.py의 JSON 결과를 DOCX 리포트로 변환하고 이메�
   - spd_report_generator.js (같은 디렉토리)
 
 Author: WKMG Automation (SPD System)
-Version: 1.0.0
+Version: 3.0.0
 """
 
 import os, sys, json, glob, subprocess, argparse, smtplib, logging
@@ -107,7 +108,6 @@ def generate_docx(input_json, output_docx=None):
         log.error(f"JS 생성기 없음: {JS_GENERATOR}")
         return None
 
-    # Node.js 의존성 확인
     if not ensure_node_deps():
         log.error("Node.js docx 패키지 설치 실패")
         return None
@@ -143,7 +143,7 @@ def generate_docx(input_json, output_docx=None):
 
 
 def build_email_body(input_json):
-    """분석 결과 JSON에서 확정 디자인 이메일 본문(HTML) 생성 — v2 디자인"""
+    """분석 결과 JSON에서 Gmail 호환 이메일 본문(HTML) 생성 — v3 table-based 디자인"""
     try:
         with open(input_json, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -179,25 +179,18 @@ def build_email_body(input_json):
         })
     items.sort(key=lambda x: x["score"], reverse=True)
 
+    # --- 통계 ---
     go_c = sum(1 for i in items if i["decision"] == "GO")
     cond_c = sum(1 for i in items if i["decision"] == "CONDITIONAL")
     nogo_c = sum(1 for i in items if i["decision"] == "NO-GO")
+    date_str = gen_at or datetime.now().strftime("%Y-%m-%d")
 
-    # --- 날짜 포맷 ---
-    from datetime import datetime as dt
-    try:
-        d = dt.strptime(gen_at, "%Y-%m-%d")
-        weekdays = ["월", "화", "수", "목", "금", "토", "일"]
-        date_str = f"{d.year}년 {d.month}월 {d.day}일 ({weekdays[d.weekday()]})"
-    except Exception:
-        date_str = gen_at
-
-    # === 총괄표 행 ===
+    # --- 헬퍼 함수 ---
     def _badge(decision):
         if decision == "GO":
             return '<span style="display:inline-block;padding:2px 10px;border-radius:3px;font-size:11px;font-weight:700;background:#d4edda;color:#155724">GO</span>'
         elif decision == "CONDITIONAL":
-            return '<span style="display:inline-block;padding:2px 10px;border-radius:3px;font-size:11px;font-weight:700;background:#fff3cd;color:#856404">COND</span>'
+            return '<span style="display:inline-block;padding:2px 10px;border-radius:3px;font-size:11px;font-weight:700;background:#fff3cd;color:#856404">CONDITIONAL</span>'
         else:
             return '<span style="display:inline-block;padding:2px 10px;border-radius:3px;font-size:11px;font-weight:700;background:#f8d7da;color:#721c24">NO-GO</span>'
 
@@ -206,15 +199,17 @@ def build_email_body(input_json):
         if s >= 55: return "#856404"
         return "#dc3545"
 
+    # --- 총괄표 행 ---
     rows_html = ""
     for it in items:
-        opacity = ' style="opacity:0.55"' if it["decision"] == "NO-GO" else ""
+        # v3: NO-GO는 color:#aaa (opacity 대신)
+        nogo_style = 'color:#aaa;' if it["decision"] == "NO-GO" else ""
         bold_open = "<strong>" if it["decision"] == "GO" else ""
         bold_close = "</strong>" if it["decision"] == "GO" else ""
-        rows_html += f'''<tr{opacity}>
-          <td style="padding:8px 10px;border-bottom:1px solid #eee">{bold_open}{it['title'][:45]}{bold_close}</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #eee">{it['agency'][:12]}</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">{it['budget']}</td>
+        rows_html += f'''<tr>
+          <td style="padding:8px 10px;border-bottom:1px solid #eee;{nogo_style}">{bold_open}{it['title'][:45]}{bold_close}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #eee;{nogo_style}">{it['agency'][:12]}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;{nogo_style}">{it['budget']}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:800;color:{_score_color(it['score'])}">{it['score']}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">{_badge(it['decision'])}</td>
         </tr>'''
@@ -238,42 +233,51 @@ def build_email_body(input_json):
         d4 = sc.get("track_record", 0)
         total_s = featured["score"]
 
-        def _bar(label, val, max_v=25):
+        # v3: table-based 프로그레스 바 (flex/linear-gradient 제거)
+        def _bar_v3(label, val, max_v=25):
             pct = int(val / max_v * 100) if max_v > 0 else 0
-            fill_color = "linear-gradient(90deg, #28a745, #20c997)" if pct >= 80 else "linear-gradient(90deg, #2E75B6, #5ba3d9)"
-            return f'''<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <div style="width:90px;font-size:12px;color:#555;text-align:right;flex-shrink:0">{label}</div>
-              <div style="flex:1;height:20px;background:#e9ecef;border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:{pct}%;border-radius:3px;background:{fill_color}"></div>
-              </div>
-              <div style="width:42px;font-size:13px;font-weight:800;color:#333;text-align:right;flex-shrink:0">{val}/{max_v}</div>
-            </div>'''
+            fill_color = "#28a745" if pct >= 80 else "#2E75B6"
+            return f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:6px">
+              <tr>
+                <td width="90" style="font-size:12px;color:#555;text-align:right;padding-right:8px">{label}</td>
+                <td style="padding:0">
+                  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#e9ecef;border-radius:3px">
+                    <tr><td width="{pct}%" style="background:{fill_color};height:20px;border-radius:3px;font-size:1px">&nbsp;</td><td style="font-size:1px">&nbsp;</td></tr>
+                  </table>
+                </td>
+                <td width="42" style="font-size:13px;font-weight:800;color:#333;text-align:right;padding-left:8px">{val}/{max_v}</td>
+              </tr>
+            </table>'''
 
-        bars_html = _bar("도메인 전문성", d1) + _bar("경쟁우위", d2) + _bar("수주 가능성", d3) + _bar("수행실적", d4)
+        bars_html = _bar_v3("도메인 전문성", d1) + _bar_v3("경쟁우위", d2) + _bar_v3("수주 가능성", d3) + _bar_v3("수행실적", d4)
 
-        # 유사 프로젝트
+        # v3: 유사 프로젝트 — table rows
         similar = featured.get("similar", [])
         similar_html = ""
         if similar:
-            li_items = ""
+            sim_rows = ""
             for sp in similar[:5]:
                 if isinstance(sp, dict):
                     name = sp.get("project_name", sp.get("name", str(sp)))
                 else:
                     name = str(sp)
-                li_items += f'<li style="font-size:12px;color:#444;padding:2px 0 2px 14px;position:relative;line-height:1.5">{name[:60]}</li>'
-            similar_html = f'''<div style="margin-top:4px;margin-left:98px;padding:10px 14px;background:#eef6ee;border-radius:5px;border-left:3px solid {accent}">
-              <div style="font-size:11px;font-weight:700;color:#1B365D;margin-bottom:5px">✦ 과거 유사 용역 경험</div>
-              <ul style="margin:0;padding:0;list-style:none">{li_items}</ul>
-            </div>'''
+                sim_rows += f'<tr><td style="font-size:12px;color:#444;padding:3px 6px;border-bottom:1px solid #d4edda">&#8226; {name[:60]}</td></tr>'
+            similar_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:8px;margin-left:98px;max-width:480px">
+              <tr><td style="padding:10px 14px;background:#eef6ee;border-radius:5px;border-left:3px solid {accent}">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr><td style="font-size:11px;font-weight:700;color:#1B365D;padding-bottom:5px">✦ 과거 유사 용역 경험</td></tr>
+                  {sim_rows}
+                </table>
+              </td></tr>
+            </table>'''
 
-        # 세부 과업
+        # v3: 세부 과업 분석 — table rows
         deliv = featured.get("deliverables", {})
         tasks = deliv.get("key_tasks", [])
         coverage = deliv.get("wkmg_coverage_pct", 0)
         tasks_html = ""
         if tasks:
-            task_items = ""
+            task_rows = ""
             for t in tasks[:6]:
                 if isinstance(t, dict):
                     tname = t.get("task", t.get("name", ""))
@@ -282,21 +286,27 @@ def build_email_body(input_json):
                 else:
                     tname, cap, partner = str(t), "중", ""
                 if cap in ("상", "높음", "high"):
-                    dot_bg, cap_bg, cap_color, cap_label = "#28a745", "#d4edda", "#155724", "● 상"
+                    cap_bg, cap_color, cap_label = "#d4edda", "#155724", "● 상"
                 elif cap in ("중", "보통", "medium"):
-                    dot_bg, cap_bg, cap_color, cap_label = "#ffc107", "#fff3cd", "#856404", "◐ 중"
+                    cap_bg, cap_color, cap_label = "#fff3cd", "#856404", "◐ 중"
                 else:
-                    dot_bg, cap_bg, cap_color, cap_label = "#dc3545", "#f8d7da", "#721c24", "○ 하"
+                    cap_bg, cap_color, cap_label = "#f8d7da", "#721c24", "○ 하"
                 partner_tag = f' <span style="font-size:10px;color:#2E75B6;background:#e8f0fe;padding:1px 6px;border-radius:2px">파트너: {partner}</span>' if partner else ""
-                task_items += f'''<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #e8f5e9;font-size:13px">
-                  <div style="width:10px;height:10px;border-radius:50%;background:{dot_bg};flex-shrink:0"></div>
-                  <div style="flex:1;color:#333">{tname[:50]}</div>
-                  <span style="font-size:11px;font-weight:700;padding:1px 6px;border-radius:2px;background:{cap_bg};color:{cap_color}">{cap_label}</span>{partner_tag}
-                </div>'''
-            tasks_html = f'''<div style="margin:18px 0">
-              <div style="font-size:13px;font-weight:700;color:#1B365D;margin-bottom:8px">📋 세부 과업 분석 ({len(tasks)}개 · WKMG 커버리지 {coverage}%)</div>
-              {task_items}
-            </div>'''
+                task_rows += f'''<tr>
+                  <td style="padding:6px 8px;border-bottom:1px solid #e8f5e9;font-size:13px;color:#333">{tname[:50]}</td>
+                  <td width="60" style="padding:6px 4px;border-bottom:1px solid #e8f5e9;text-align:center">
+                    <span style="font-size:11px;font-weight:700;padding:1px 6px;border-radius:2px;background:{cap_bg};color:{cap_color}">{cap_label}</span>
+                  </td>
+                  <td width="100" style="padding:6px 4px;border-bottom:1px solid #e8f5e9;font-size:10px;color:#2E75B6">{partner_tag}</td>
+                </tr>'''
+            tasks_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0">
+              <tr><td style="font-size:13px;font-weight:700;color:#1B365D;padding-bottom:8px">📋 세부 과업 분석 ({len(tasks)}개 · WKMG 커버리지 {coverage}%)</td></tr>
+              <tr><td>
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  {task_rows}
+                </table>
+              </td></tr>
+            </table>'''
 
         # 전략 메시지
         strat = featured.get("strategy", {})
@@ -305,77 +315,99 @@ def build_email_body(input_json):
         partners = strat.get("required_partners", strat.get("partners", ""))
         strategy_html = ""
         if core_msg:
-            diff_items = ""
+            diff_rows = ""
             for d in (diffs[:4] if isinstance(diffs, list) else []):
-                diff_items += f'<li style="font-size:13px;color:#444;padding:3px 0;padding-left:16px;position:relative"><span style="position:absolute;left:0;color:#2E75B6;font-weight:bold">▸</span>{d}</li>'
-            partner_line = f'<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;font-size:12px;color:#666"><strong style="color:#333">필요 파트너:</strong> {partners}</div>' if partners else ""
-            strategy_html = f'''<div style="margin:18px 0;padding:14px 16px;background:#ffffff;border-radius:6px;border:1px solid #e0e0e0">
-              <div style="font-size:15px;font-weight:700;color:#1B365D;margin-bottom:10px;line-height:1.4">🎯 "{core_msg}"</div>
-              <ul style="margin:0;padding:0;list-style:none">{diff_items}</ul>
-              {partner_line}
-            </div>'''
+                diff_rows += f'<tr><td style="font-size:13px;color:#444;padding:3px 0;padding-left:16px">▸ {d}</td></tr>'
+            partner_line = f'<tr><td style="padding-top:10px;border-top:1px solid #eee;font-size:12px;color:#666"><strong style="color:#333">필요 파트너:</strong> {partners}</td></tr>' if partners else ""
+            strategy_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0;border:1px solid #e0e0e0;border-radius:6px">
+              <tr><td style="padding:14px 16px;background:#ffffff">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr><td style="font-size:15px;font-weight:700;color:#1B365D;padding-bottom:10px;line-height:1.4">🎯 &quot;{core_msg}&quot;</td></tr>
+                  {diff_rows}
+                  {partner_line}
+                </table>
+              </td></tr>
+            </table>'''
 
         go_section_html = f'''
-        <div style="padding:24px 32px;background:{bg_color};border-top:3px solid {accent}">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-            <div style="background:{accent};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">✓</div>
-            <div style="font-size:12px;font-weight:700;color:{accent};letter-spacing:1px">{label_text}</div>
-          </div>
-          <div style="font-size:17px;font-weight:700;color:#1B365D;margin:4px 0;line-height:1.4">{featured['title']}</div>
+        <tr><td style="padding:24px 32px;background:{bg_color};border-top:3px solid {accent}">
+          <table cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td width="38" style="vertical-align:top">
+                <div style="background:{accent};color:#fff;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-size:14px;font-weight:800">&#10003;</div>
+              </td>
+              <td style="font-size:12px;font-weight:700;color:{accent};letter-spacing:1px;vertical-align:middle">{label_text}</td>
+            </tr>
+          </table>
+          <div style="font-size:17px;font-weight:700;color:#1B365D;margin:8px 0 4px;line-height:1.4">{featured['title']}</div>
           <div style="font-size:13px;color:#666;margin-bottom:16px">
-            <strong style="color:#333">{featured['agency']}</strong> · 예산 <strong style="color:#333">{featured['budget']}</strong>
+            <strong style="color:#333">{featured['agency']}</strong> &#183; 예산 <strong style="color:#333">{featured['budget']}</strong>
           </div>
-          <div style="margin:16px 0">
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
-              <div style="font-size:36px;font-weight:800;color:{accent};line-height:1">{total_s}</div>
-              <div style="font-size:16px;color:#999">/100점</div>
-            </div>
-            {bars_html}
-            {similar_html}
-          </div>
+          <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0">
+            <tr>
+              <td width="80" style="vertical-align:top">
+                <div style="font-size:36px;font-weight:800;color:{accent};line-height:1">{total_s}</div>
+                <div style="font-size:14px;color:#999">/100점</div>
+              </td>
+              <td style="vertical-align:top;padding-left:12px">
+                {bars_html}
+              </td>
+            </tr>
+          </table>
+          {similar_html}
           {tasks_html}
           {strategy_html}
-        </div>'''
+        </td></tr>'''
 
     # === DOCX 파일명 ===
     docx_name = f"SPD_리포트_{gen_at.replace('-', '')}.docx"
 
-    # === 최종 HTML 조립 ===
-    html = f'''<div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif">
+    # === 최종 HTML 조립 — v3 table-based (Gmail/Outlook 호환) ===
+    html = f'''<table cellpadding="0" cellspacing="0" border="0" width="680" align="center" style="background:#ffffff;border-radius:8px;overflow:hidden;font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif">
 
-  <div style="background:linear-gradient(135deg,#1B365D 0%,#2E75B6 100%);padding:28px 32px">
-    <div style="color:rgba(255,255,255,0.6);font-size:10px;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px">WKMG · STRATEGIC PROCUREMENT DASHBOARD</div>
-    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
-      <div style="color:#ffffff;font-size:22px;font-weight:700;margin:0;line-height:1.3">📊 SPD 일일 분석 리포트</div>
-      <div style="color:rgba(255,255,255,0.7);font-size:13px;font-weight:400;letter-spacing:0.5px;padding-left:14px;border-left:1px solid rgba(255,255,255,0.3)">대한민국 마케팅 No.1 전문가 그룹</div>
-    </div>
-    <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-top:10px"><span style="display:inline-block;background:rgba(255,255,255,0.15);padding:3px 12px;border-radius:4px">{date_str} · 오전 9시 자동 분석</span></div>
-  </div>
+  <!-- 헤더 -->
+  <tr><td style="background:#1B365D;padding:28px 32px">
+    <div style="color:#8899b3;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px">WKMG &#183; STRATEGIC PROCUREMENT DASHBOARD</div>
+    <table cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td style="color:#ffffff;font-size:22px;font-weight:700;line-height:1.3">&#128202; SPD 일일 분석 리포트</td>
+        <td style="color:#8899b3;font-size:13px;font-weight:400;letter-spacing:0.5px;padding-left:14px;border-left:1px solid #4a5f80;text-align:right">대한민국 마케팅 No.1 전문가 그룹</td>
+      </tr>
+    </table>
+    <div style="color:#8899b3;font-size:12px;margin-top:10px"><span style="display:inline-block;background:#2a4a75;padding:3px 12px;border-radius:4px">{date_str} &#183; 오전 9시 자동 분석</span></div>
+  </td></tr>
 
-  <div style="padding:24px 32px;border-bottom:1px solid #e8eaed">
-    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-      <div style="font-size:14px;font-weight:700;color:#1B365D">오늘의 입찰 분석 현황</div>
-      <div style="font-size:11px;color:#888">RFP RADAR에서 도출된 예비후보 용역 대상으로 정밀 평가 실시</div>
-    </div>
-    <div style="display:flex;gap:12px;margin-bottom:18px">
-      <div style="flex:1;text-align:center;padding:14px 8px;border-radius:8px;background:#f0f4f8">
-        <div style="font-size:28px;font-weight:800;line-height:1;color:#1B365D">{total}</div>
-        <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">분석 공고</div>
-      </div>
-      <div style="flex:1;text-align:center;padding:14px 8px;border-radius:8px;background:#d4edda">
-        <div style="font-size:28px;font-weight:800;line-height:1;color:#28a745">{go_c}</div>
-        <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">GO</div>
-      </div>
-      <div style="flex:1;text-align:center;padding:14px 8px;border-radius:8px;background:#fff3cd">
-        <div style="font-size:28px;font-weight:800;line-height:1;color:#856404">{cond_c}</div>
-        <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">CONDITIONAL</div>
-      </div>
-      <div style="flex:1;text-align:center;padding:14px 8px;border-radius:8px;background:#f8d7da">
-        <div style="font-size:28px;font-weight:800;line-height:1;color:#dc3545">{nogo_c}</div>
-        <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">NO-GO</div>
-      </div>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+  <!-- 대시보드 요약 -->
+  <tr><td style="padding:24px 32px;border-bottom:1px solid #e8eaed">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td style="font-size:14px;font-weight:700;color:#1B365D">오늘의 입찰 분석 현황</td>
+        <td style="font-size:11px;color:#888;text-align:right">RFP RADAR 예비후보 대상 정밀 평가</td>
+      </tr>
+    </table>
+    <!-- 4칸 대시보드 — td width 25% -->
+    <table cellpadding="0" cellspacing="8" border="0" width="100%" style="margin:14px 0 18px">
+      <tr>
+        <td width="25%" style="text-align:center;padding:14px 8px;border-radius:8px;background:#f0f4f8">
+          <div style="font-size:28px;font-weight:800;line-height:1;color:#1B365D">{total}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">분석 공고</div>
+        </td>
+        <td width="25%" style="text-align:center;padding:14px 8px;border-radius:8px;background:#d4edda">
+          <div style="font-size:28px;font-weight:800;line-height:1;color:#28a745">{go_c}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">GO</div>
+        </td>
+        <td width="25%" style="text-align:center;padding:14px 8px;border-radius:8px;background:#fff3cd">
+          <div style="font-size:28px;font-weight:800;line-height:1;color:#856404">{cond_c}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">CONDITIONAL</div>
+        </td>
+        <td width="25%" style="text-align:center;padding:14px 8px;border-radius:8px;background:#f8d7da">
+          <div style="font-size:28px;font-weight:800;line-height:1;color:#dc3545">{nogo_c}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;letter-spacing:0.5px">NO-GO</div>
+        </td>
+      </tr>
+    </table>
+    <!-- 총괄표 -->
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;font-size:13px">
       <tr>
         <th style="background:#1B365D;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:11px;letter-spacing:0.5px;width:42%">공고명</th>
         <th style="background:#1B365D;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:11px;letter-spacing:0.5px;width:18%">발주기관</th>
@@ -385,34 +417,36 @@ def build_email_body(input_json):
       </tr>
       {rows_html}
     </table>
-  </div>
+  </td></tr>
 
+  <!-- GO 상세 분석 -->
   {go_section_html}
 
-  <div style="padding:20px 32px;background:#f8f9fa;border-top:1px solid #e8eaed">
+  <!-- 푸터 -->
+  <tr><td style="padding:20px 32px;background:#f8f9fa;border-top:1px solid #e8eaed">
     <div style="font-size:14px;font-weight:800;color:#1B365D;margin-bottom:10px">[제안 전략] 리포트 참조</div>
     <div style="font-size:13px;color:#333;margin-bottom:6px">
-      📎 전체 상세 분석 리포트
+      &#128206; 전체 상세 분석 리포트
       <span style="display:inline-block;background:#2E75B6;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:600;margin-left:4px">{docx_name}</span>
     </div>
     <div style="font-size:12px;color:#dc3545;font-weight:700;margin-top:10px;line-height:1.5;padding:8px 12px;background:#fff5f5;border-radius:4px;border-left:3px solid #dc3545">
-      ⚠ 조건부 입찰 대상(CONDITIONAL) 용역도 매우 중요한 건이니 리포트 내용 반드시 확인 바랍니다.
+      &#9888; 조건부 입찰 대상(CONDITIONAL) 용역도 매우 중요한 건이니 리포트 내용 반드시 확인 바랍니다.
     </div>
     <div style="font-size:11px;color:#999;line-height:1.5;margin-top:14px">
-      ※ 본 리포트는 SPD {ver} 자동 분석 시스템이 생성했습니다.<br>
-      ※ GO 공고는 영업팀 검토 후 입찰 진행을 결정해주세요.<br>
-      ※ CONDITIONAL 공고의 상세 조건은 첨부 DOCX를 참조하세요.
+      &#8251; 본 리포트는 SPD {ver} 자동 분석 시스템이 생성했습니다.<br>
+      &#8251; GO 공고는 영업팀 검토 후 입찰 진행을 결정해주세요.<br>
+      &#8251; CONDITIONAL 공고의 상세 조건은 첨부 DOCX를 참조하세요.
     </div>
-    <div style="font-size:10px;color:#bbb;margin-top:8px;letter-spacing:1px">WKMG STRATEGIC PROCUREMENT DASHBOARD · SPD v3.0</div>
-  </div>
+    <div style="font-size:10px;color:#bbb;margin-top:8px;letter-spacing:1px">WKMG STRATEGIC PROCUREMENT DASHBOARD &#183; SPD v3.0</div>
+  </td></tr>
 
-</div>'''
+</table>'''
     return html
 
 
 def send_email(docx_path, html_body, config):
     """DOCX 리포트를 이메일로 발송"""
-    email_cfg = config.get("email", config)  # config.email 또는 config 직접
+    email_cfg = config.get("email", config)
     smtp_server = email_cfg.get("smtp_server", "smtp.gmail.com")
     smtp_port = email_cfg.get("smtp_port", 587)
     sender_email = email_cfg.get("sender_email", "")
