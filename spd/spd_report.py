@@ -227,10 +227,12 @@ def build_email_body(input_json):
         label_text = "GO — 적극 참여 추천" if is_go else "CONDITIONAL — 조건부 참여 검토"
 
         sc = featured["scoring"]
-        d1 = sc.get("domain_expertise", 0)
-        d2 = sc.get("competitive_advantage", 0)
-        d3 = sc.get("win_probability", 0)
-        d4 = sc.get("track_record", 0)
+        def _safe_score(v):
+            return v.get("score", 0) if isinstance(v, dict) else (int(v) if isinstance(v, (int, float)) else 0)
+        d1 = _safe_score(sc.get("domain_expertise", 0))
+        d2 = _safe_score(sc.get("competitive_advantage", 0))
+        d3 = _safe_score(sc.get("win_probability", 0))
+        d4 = _safe_score(sc.get("track_record", 0))
         total_s = featured["score"]
 
         # v3: table-based 프로그레스 바 (flex/linear-gradient 제거)
