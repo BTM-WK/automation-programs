@@ -220,13 +220,15 @@ def get_similar_projects(query_text: str, config: Dict) -> List[Dict]:
                 similarity = max(0, 1 - dist)
                 
                 matched.append({
-                    "filename": meta.get("source_file", "unknown"),
+                    "filename": meta.get("file_name", meta.get("source_file", "unknown")),
+                    "project_name": meta.get("project_name", ""),
                     "similarity": similarity,
-                    "b2g_b2b": meta.get("b2g_b2b", ""),
+                    "b2g_b2b": meta.get("business_type", meta.get("b2g_b2b", "")),
                     "category": meta.get("category", ""),
                     "year": meta.get("year", ""),
                     "client": meta.get("client", ""),
                     "domain": meta.get("domain", ""),
+                    "sub_category": meta.get("sub_category", ""),
                     "preview": doc[:200],
                 })
         

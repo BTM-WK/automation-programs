@@ -260,7 +260,18 @@ def build_email_body(input_json):
             sim_rows = ""
             for sp in similar[:5]:
                 if isinstance(sp, dict):
-                    name = sp.get("project_name", sp.get("name", str(sp)))
+                    name = sp.get("project_name") or sp.get("name") or sp.get("title") or sp.get("filename") or ""
+                    if not name or name == "unknown":
+                        # fallback: year + client + domain 조합
+                        parts = [sp.get("year",""), sp.get("client",""), sp.get("domain",""), sp.get("category","")]
+                        name = " ".join(p for p in parts if p and p != "unknown")
+                    if not name:
+                        name = sp.get("preview", str(sp))[:60]
+                    # similarity 표시
+                    sim_val = sp.get("similarity", 0)
+                    if isinstance(sim_val, (int, float)) and sim_val > 0:
+                        name += f" ({sim_val*100:.0f}%" if sim_val <= 1 else f" ({sim_val:.0f}%"
+                        name += " 유사)"
                 else:
                     name = str(sp)
                 sim_rows += f'<tr><td style="font-size:12px;color:#444;padding:3px 6px;border-bottom:1px solid #d4edda">&#8226; {name[:60]}</td></tr>'
@@ -468,16 +479,23 @@ def send_email(docx_path, html_body, config):
     msg["Subject"] = subject
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    # DOCX 첨부
+    # DOCX 첨부 (한글 파일명 RFC 2231 인코딩)
     if docx_path and os.path.exists(docx_path):
         with open(docx_path, "rb") as f:
-            part = MIMEBase("application", "octet-stream")
+            part = MIMEBase("application", "vnd.openxmlformats-officedocument.wordprocessingml.document")
             part.set_payload(f.read())
         encoders.encode_base64(part)
         filename = os.path.basename(docx_path)
-        part.add_header("Content-Disposition", f"attachment; filename={filename}")
+        # ASCII 안전한 fallback + UTF-8 filename* 파라미터
+        ascii_name = f"SPD_Report_{today.replace('.','')}.docx"
+        part.add_header(
+            "Content-Disposition", "attachment",
+            filename=ascii_name  # ASCII fallback
+        )
+        # RFC 2231 UTF-8 파라미터 추가 (한글 파일명 지원)
+        part.set_param("filename*", f"UTF-8''{filename}", header="Content-Disposition", charset="utf-8")
         msg.attach(part)
-        log.info(f"📎 첨부: {filename}")
+        log.info(f"📎 첨부: {filename} (fallback: {ascii_name})")
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
