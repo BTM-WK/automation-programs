@@ -335,7 +335,9 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
             "title": title,
             "status": "dry_run",
             "rfp_text_length": len(rfp_text),
-            "similar_projects": len(similar_projects),
+            "similar_projects_count": len(similar_projects),
+            "similar_projects": similar_projects,  # 리스트 타입 유지 (이전: int로 저장하여 타입 불일치)
+            "analysis": {},  # 빈 dict로 초기화 (report에서 안전하게 접근)
         }
     
     log.info(f"  🤖 GPT-4o 정밀분석 시작... (프롬프트: {PROMPT_VERSION})")

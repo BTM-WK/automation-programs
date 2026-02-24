@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPD Report Module v3.0 — DOCX 리포트 생성 + Gmail 호환 이메일 발송
+SPD Report Module v3.1 — DOCX 리포트 생성 + Gmail 호환 이메일 발송
 ===================================================================
 spd_analysis_engine.py의 JSON 결과를 DOCX 리포트로 변환하고 이메일 발송.
-v3: Gmail/Outlook 호환 table-based 레이아웃
+v3.1: GPT v3 JSON 스키마와 완전 매칭 + Gmail/Outlook 호환 table-based 레이아웃
 
 사용법:
   python spd_report.py --input data/analysis_results/analysis_20260222.json
@@ -143,7 +143,19 @@ def generate_docx(input_json, output_docx=None):
 
 
 def build_email_body(input_json):
-    """분석 결과 JSON에서 Gmail 호환 이메일 본문(HTML) 생성 — v3 table-based 디자인"""
+    """
+    분석 결과 JSON에서 Gmail 호환 이메일 본문(HTML) 생성
+    v3.1: GPT v3 JSON 스키마 키와 완전 매칭
+    
+    GPT v3 JSON 구조 (spd_prompts_v3.py 참조):
+      analysis.scoring.{domain_expertise, track_record, competitive_edge, win_probability, total_score}
+      analysis.go_no_go.{decision, decision_reason, conditions, nogo_reasons}
+      analysis.deliverables_analysis.{total_deliverables, items[], wkmg_coverage_pct}
+        items[]: {deliverable, wkmg_capability, capability_reason, needs_partner, partner_type}
+      analysis.strategy.{core_message, top3_emphasis, evaluator_concerns, needed_partners, proposal_pages, prep_days, action_items}
+      analysis.similar_projects_assessment.{best_match, reusable_assets, gap_from_past}
+      analysis.competitive_landscape.{likely_competitors, wkmg_unique_selling_point}
+    """
     try:
         with open(input_json, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -155,27 +167,44 @@ def build_email_body(input_json):
     total = data.get("total_analyzed", len(analyses))
     ver = data.get("prompt_version", "v3")
 
-    # --- 분석 항목 파싱 ---
+    # --- 안전 접근 헬퍼 ---
+    def _safe_dict(obj):
+        return obj if isinstance(obj, dict) else {}
+    def _safe_list(obj):
+        return obj if isinstance(obj, list) else []
+    def _safe_score(v):
+        if isinstance(v, dict): return v.get("score", 0)
+        if isinstance(v, (int, float)): return int(v)
+        return 0
+
+    # --- 분석 항목 파싱 (GPT v3 스키마 키 매칭) ---
     items = []
     for a in analyses:
-        gpt = a.get("analysis", {})
-        scoring = gpt.get("scoring", {})
+        gpt = _safe_dict(a.get("analysis", {}))
+        scoring = _safe_dict(gpt.get("scoring", {}))
         go_nogo = gpt.get("go_no_go", {})
-        deliv = gpt.get("deliverables_analysis", {})
-        strat = gpt.get("strategic_recommendation", {})
-        total_score = scoring.get("total_score", 0) if isinstance(scoring, dict) else 0
-        decision = go_nogo.get("decision", "UNKNOWN") if isinstance(go_nogo, dict) else str(go_nogo)
+        deliv = _safe_dict(gpt.get("deliverables_analysis", {}))
+        # strategy 키: GPT 스키마는 "strategy", fallback으로 "strategic_recommendation"도 체크
+        strategy = _safe_dict(gpt.get("strategy", gpt.get("strategic_recommendation", {})))
+        similar_assess = _safe_dict(gpt.get("similar_projects_assessment", {}))
+        competitive = _safe_dict(gpt.get("competitive_landscape", {}))
+
+        total_score = scoring.get("total_score", 0) if isinstance(scoring.get("total_score"), (int, float)) else 0
+        decision = _safe_dict(go_nogo).get("decision", "UNKNOWN") if isinstance(go_nogo, dict) else str(go_nogo)
+
         items.append({
-            "title": a.get("bid_title") or a.get("title", "제목 없음"),
+            "title": a.get("title", gpt.get("basic_info", {}).get("title", "제목 없음")),
             "agency": a.get("agency", ""),
-            "budget": a.get("budget_text") or a.get("budget_str", ""),
+            "budget": a.get("budget_str", ""),
             "score": total_score,
             "decision": decision,
-            "scoring": scoring if isinstance(scoring, dict) else {},
-            "deliverables": deliv if isinstance(deliv, dict) else {},
-            "strategy": strat if isinstance(strat, dict) else {},
-            "similar": a.get("similar_projects", gpt.get("similar_projects", [])),
-            "go_conditions": go_nogo.get("conditions", []) if isinstance(go_nogo, dict) else []
+            "scoring": scoring,
+            "deliverables": deliv,
+            "strategy": strategy,
+            "similar_raw": _safe_list(a.get("similar_projects", [])),  # ChromaDB raw 데이터
+            "similar_assess": similar_assess,  # GPT의 유사프로젝트 평가
+            "competitive": competitive,
+            "go_nogo_full": _safe_dict(go_nogo) if isinstance(go_nogo, dict) else {},
         })
     items.sort(key=lambda x: x["score"], reverse=True)
 
@@ -227,12 +256,11 @@ def build_email_body(input_json):
         label_text = "GO — 적극 참여 추천" if is_go else "CONDITIONAL — 조건부 참여 검토"
 
         sc = featured["scoring"]
-        def _safe_score(v):
-            return v.get("score", 0) if isinstance(v, dict) else (int(v) if isinstance(v, (int, float)) else 0)
+        # GPT v3 스키마 키: domain_expertise, track_record, competitive_edge, win_probability
         d1 = _safe_score(sc.get("domain_expertise", 0))
-        d2 = _safe_score(sc.get("competitive_advantage", 0))
-        d3 = _safe_score(sc.get("win_probability", 0))
-        d4 = _safe_score(sc.get("track_record", 0))
+        d2 = _safe_score(sc.get("track_record", 0))
+        d3 = _safe_score(sc.get("competitive_edge", 0))
+        d4 = _safe_score(sc.get("win_probability", 0))
         total_s = featured["score"]
 
         # v3: table-based 프로그레스 바 (flex/linear-gradient 제거)
@@ -251,30 +279,36 @@ def build_email_body(input_json):
               </tr>
             </table>'''
 
-        bars_html = _bar_v3("도메인 전문성", d1) + _bar_v3("경쟁우위", d2) + _bar_v3("수주 가능성", d3) + _bar_v3("수행실적", d4)
+        bars_html = _bar_v3("도메인 전문성", d1) + _bar_v3("수행실적", d2) + _bar_v3("경쟁우위", d3) + _bar_v3("수주 가능성", d4)
 
-        # v3: 유사 프로젝트 — table rows
-        similar = featured.get("similar", [])
+        # v3.1: 유사 프로젝트 — ChromaDB raw + GPT 평가 병합
+        similar_raw = _safe_list(featured.get("similar_raw", []))
+        similar_assess = featured.get("similar_assess", {})
         similar_html = ""
-        if similar:
+        
+        # GPT의 best_match 표시 + ChromaDB raw 데이터 병합
+        sim_entries = []
+        if similar_assess.get("best_match"):
+            sim_entries.append(f"\u2605 {similar_assess['best_match'][:80]}")
+        for sp in similar_raw[:4]:
+            if isinstance(sp, dict):
+                name = sp.get("project_name") or sp.get("filename") or ""
+                if not name or name == "unknown":
+                    parts = [sp.get("year",""), sp.get("client",""), sp.get("domain",""), sp.get("category","")]
+                    name = " ".join(p for p in parts if p and p != "unknown")
+                if not name:
+                    name = sp.get("preview", "")[:60]
+                sim_val = sp.get("similarity", 0)
+                if isinstance(sim_val, (int, float)) and sim_val > 0:
+                    pct = sim_val * 100 if sim_val <= 1 else sim_val
+                    name += f" ({pct:.0f}% 유사)"
+                if name:
+                    sim_entries.append(name[:80])
+        
+        if sim_entries:
             sim_rows = ""
-            for sp in similar[:5]:
-                if isinstance(sp, dict):
-                    name = sp.get("project_name") or sp.get("name") or sp.get("title") or sp.get("filename") or ""
-                    if not name or name == "unknown":
-                        # fallback: year + client + domain 조합
-                        parts = [sp.get("year",""), sp.get("client",""), sp.get("domain",""), sp.get("category","")]
-                        name = " ".join(p for p in parts if p and p != "unknown")
-                    if not name:
-                        name = sp.get("preview", str(sp))[:60]
-                    # similarity 표시
-                    sim_val = sp.get("similarity", 0)
-                    if isinstance(sim_val, (int, float)) and sim_val > 0:
-                        name += f" ({sim_val*100:.0f}%" if sim_val <= 1 else f" ({sim_val:.0f}%"
-                        name += " 유사)"
-                else:
-                    name = str(sp)
-                sim_rows += f'<tr><td style="font-size:12px;color:#444;padding:3px 6px;border-bottom:1px solid #d4edda">&#8226; {name[:60]}</td></tr>'
+            for entry in sim_entries[:5]:
+                sim_rows += f'<tr><td style="font-size:12px;color:#444;padding:3px 6px;border-bottom:1px solid #d4edda">&#8226; {entry}</td></tr>'
             similar_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:8px;margin-left:98px;max-width:480px">
               <tr><td style="padding:10px 14px;background:#eef6ee;border-radius:5px;border-left:3px solid {accent}">
                 <table cellpadding="0" cellspacing="0" border="0" width="100%">
@@ -284,18 +318,23 @@ def build_email_body(input_json):
               </td></tr>
             </table>'''
 
-        # v3: 세부 과업 분석 — table rows
+        # v3.1: 세부 과업 분석 — GPT v3 스키마: deliverables_analysis.items[]
         deliv = featured.get("deliverables", {})
-        tasks = deliv.get("key_tasks", [])
+        # GPT v3 스키마: "items" 키 사용, fallback "key_tasks"
+        tasks = _safe_list(deliv.get("items", deliv.get("key_tasks", [])))
         coverage = deliv.get("wkmg_coverage_pct", 0)
+        total_deliv = deliv.get("total_deliverables", len(tasks))
         tasks_html = ""
         if tasks:
             task_rows = ""
             for t in tasks[:6]:
                 if isinstance(t, dict):
-                    tname = t.get("task", t.get("name", ""))
-                    cap = t.get("capability", t.get("wkmg_capability", "중"))
-                    partner = t.get("required_partner", t.get("partner", ""))
+                    # GPT v3 스키마: deliverable, wkmg_capability, capability_reason, needs_partner, partner_type
+                    tname = t.get("deliverable", t.get("task", t.get("name", "")))
+                    cap = t.get("wkmg_capability", t.get("capability", "중"))
+                    partner = t.get("partner_type", t.get("required_partner", ""))
+                    if not partner and t.get("needs_partner"):
+                        partner = "파트너 필요"
                 else:
                     tname, cap, partner = str(t), "중", ""
                 if cap in ("상", "높음", "high"):
@@ -313,7 +352,7 @@ def build_email_body(input_json):
                   <td width="100" style="padding:6px 4px;border-bottom:1px solid #e8f5e9;font-size:10px;color:#2E75B6">{partner_tag}</td>
                 </tr>'''
             tasks_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0">
-              <tr><td style="font-size:13px;font-weight:700;color:#1B365D;padding-bottom:8px">📋 세부 과업 분석 ({len(tasks)}개 · WKMG 커버리지 {coverage}%)</td></tr>
+              <tr><td style="font-size:13px;font-weight:700;color:#1B365D;padding-bottom:8px">📋 세부 과업 분석 ({total_deliv}개 · WKMG 커버리지 {coverage}%)</td></tr>
               <tr><td>
                 <table cellpadding="0" cellspacing="0" border="0" width="100%">
                   {task_rows}
@@ -321,22 +360,31 @@ def build_email_body(input_json):
               </td></tr>
             </table>'''
 
-        # 전략 메시지
+        # v3.1: 전략 섹션 — GPT v3 스키마: strategy.{core_message, top3_emphasis, evaluator_concerns, needed_partners}
         strat = featured.get("strategy", {})
         core_msg = strat.get("core_message", "")
-        diffs = strat.get("key_differentiators", strat.get("key_points", []))
-        partners = strat.get("required_partners", strat.get("partners", ""))
+        # GPT v3 스키마: top3_emphasis, fallback key_differentiators
+        emphasis = _safe_list(strat.get("top3_emphasis", strat.get("key_differentiators", strat.get("key_points", []))))
+        # GPT v3 스키마: needed_partners, fallback required_partners
+        partners_list = _safe_list(strat.get("needed_partners", strat.get("required_partners", [])))
+        partners = ", ".join(partners_list) if isinstance(partners_list, list) else str(partners_list)
         strategy_html = ""
         if core_msg:
             diff_rows = ""
-            for d in (diffs[:4] if isinstance(diffs, list) else []):
+            for d in emphasis[:4]:
                 diff_rows += f'<tr><td style="font-size:13px;color:#444;padding:3px 0;padding-left:16px">▸ {d}</td></tr>'
+            # 평가위원 우려 사항도 표시
+            concerns = _safe_list(strat.get("evaluator_concerns", []))
+            concern_rows = ""
+            if concerns:
+                concern_rows = '<tr><td style="padding-top:8px;border-top:1px solid #eee;font-size:12px;color:#856404"><strong>⚠ 평가위원 우려:</strong> ' + " / ".join(concerns[:2]) + '</td></tr>'
             partner_line = f'<tr><td style="padding-top:10px;border-top:1px solid #eee;font-size:12px;color:#666"><strong style="color:#333">필요 파트너:</strong> {partners}</td></tr>' if partners else ""
             strategy_html = f'''<table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0;border:1px solid #e0e0e0;border-radius:6px">
               <tr><td style="padding:14px 16px;background:#ffffff">
                 <table cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr><td style="font-size:15px;font-weight:700;color:#1B365D;padding-bottom:10px;line-height:1.4">🎯 &quot;{core_msg}&quot;</td></tr>
                   {diff_rows}
+                  {concern_rows}
                   {partner_line}
                 </table>
               </td></tr>
@@ -533,15 +581,15 @@ def generate_summary_stats(input_json):
 
     items = []
     for a in analyses:
-        gpt = a.get("analysis", {})
-        scoring = gpt.get("scoring", {})
+        gpt = a.get("analysis", {}) if isinstance(a.get("analysis"), dict) else {}
+        scoring = gpt.get("scoring", {}) if isinstance(gpt.get("scoring"), dict) else {}
         go_nogo = gpt.get("go_no_go", {})
-        deliv = gpt.get("deliverables_analysis", {})
-        total_score = scoring.get("total_score", 0) if isinstance(scoring, dict) else 0
+        deliv = gpt.get("deliverables_analysis", {}) if isinstance(gpt.get("deliverables_analysis"), dict) else {}
+        total_score = scoring.get("total_score", 0) if isinstance(scoring.get("total_score"), (int, float)) else 0
         decision = go_nogo.get("decision", "UNKNOWN") if isinstance(go_nogo, dict) else str(go_nogo)
-        coverage = deliv.get("wkmg_coverage_pct", 0) if isinstance(deliv, dict) else 0
+        coverage = deliv.get("wkmg_coverage_pct", 0) if isinstance(deliv.get("wkmg_coverage_pct"), (int, float)) else 0
         items.append({
-            "title": a.get("bid_title") or a.get("title", "?"),
+            "title": a.get("title", gpt.get("basic_info", {}).get("title", "?")),
             "agency": a.get("agency", "?"),
             "score": total_score,
             "decision": decision,
