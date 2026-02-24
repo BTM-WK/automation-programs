@@ -105,8 +105,17 @@ jobs:
         with:
           node-version: '20'
       
-      # 9. DOCX 리포트 생성 + 이메일 발송 (통합)
-      - name: Generate Report & Send Email
+      # 9. DOCX 리포트 생성
+      - name: Generate DOCX Report
+        working-directory: spd
+        run: |
+          npm install docx
+          python spd_report.py --latest --stats-only
+          python spd_report.py --latest
+          echo "📄 DOCX 리포트 생성 완료"
+      
+      # 10. 이메일 발송
+      - name: Send Email Report
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           SPD_SMTP_SERVER: smtp.gmail.com
@@ -115,19 +124,8 @@ jobs:
           SPD_RECIPIENTS: ${{ secrets.RFP_RECIPIENT_EMAILS }}
         working-directory: spd
         run: |
-          npm install docx
           python spd_report.py --latest --email
-          echo "📄 DOCX 생성 + 📧 이메일 발송 완료"
         continue-on-error: true
-      
-      # 9b. DRY-RUN 시 통계만 출력
-      - name: Stats Only (dry-run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        working-directory: spd
-        run: |
-          npm install docx
-          python spd_report.py --latest --stats-only
-          echo "📄 DRY-RUN 통계 출력 완료"
       
       # 11. 결과 아카이브
       - name: Archive SPD results
