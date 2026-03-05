@@ -69,21 +69,33 @@ jobs:
       
       # 6. Phase 1-A: Auto-Fetch
       - name: Run Auto-Fetch
+        id: auto_fetch
         env:
           RFP_SERVICE_KEY: ${{ secrets.RFP_SERVICE_KEY }}
         working-directory: spd
         run: |
           GRADE="${{ github.event.inputs.min_grade || 'B' }}"
           BID="${{ github.event.inputs.specific_bid || '' }}"
-          
+
           CMD="python spd_auto_fetch.py --grade $GRADE"
           if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
-          
+
           echo "🚀 Auto-Fetch: $CMD"
           eval $CMD
-      
-      # 7. Phase 1-B: Analysis
+
+          # fetch 결과 존재 여부 → 후속 단계 조건 분기
+          FETCH_COUNT=$(ls data/fetch_results/fetch_*.json 2>/dev/null | wc -l)
+          if [ "$FETCH_COUNT" -gt "0" ]; then
+            echo "has_results=true" >> $GITHUB_OUTPUT
+            echo "✅ Fetch 결과: ${FETCH_COUNT}건"
+          else
+            echo "has_results=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ 오늘 분석 대상 공고 0건 — 후속 단계 스킵"
+          fi
+
+      # 7. Phase 1-B: Analysis (fetch 결과 있을 때만)
       - name: Run Analysis Engine
+        if: steps.auto_fetch.outputs.has_results == 'true'
         env:
           RFP_OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
@@ -91,32 +103,34 @@ jobs:
         run: |
           DRY="${{ github.event.inputs.dry_run || 'false' }}"
           BID="${{ github.event.inputs.specific_bid || '' }}"
-          
+
           CMD="python spd_analysis_engine.py"
           if [ "$DRY" = "true" ]; then CMD="$CMD --dry-run"; fi
           if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
-          
+
           echo "🔬 Analysis: $CMD"
           eval $CMD
-      
-      # 8. Node.js 설정 (DOCX 생성용)
+
+      # 8. Node.js 설정 (DOCX 생성용, fetch 결과 있을 때만)
       - name: Setup Node.js
+        if: steps.auto_fetch.outputs.has_results == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
-      # 9. DOCX 리포트 생성
+
+      # 9. DOCX 리포트 생성 (fetch 결과 있을 때만)
       - name: Generate DOCX Report
+        if: steps.auto_fetch.outputs.has_results == 'true'
         working-directory: spd
         run: |
           npm install docx
           python spd_report.py --latest --stats-only
           python spd_report.py --latest
           echo "📄 DOCX 리포트 생성 완료"
-      
-      # 10. 이메일 발송
+
+      # 10. 이메일 발송 (fetch 결과 있을 때만)
       - name: Send Email Report
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ steps.auto_fetch.outputs.has_results == 'true' && github.event.inputs.dry_run != 'true' }}
         env:
           SPD_SMTP_SERVER: smtp.gmail.com
           SPD_SENDER_EMAIL: ${{ secrets.RFP_SENDER_EMAIL }}
@@ -126,10 +140,17 @@ jobs:
         run: |
           python spd_report.py --latest --email
         continue-on-error: true
+
+      # 10-1. 0건 안내 (분석 대상 없을 때)
+      - name: No bids today
+        if: steps.auto_fetch.outputs.has_results == 'false'
+        run: |
+          echo "📭 오늘 WKMG 매칭 공고 0건 — 파이프라인 정상 종료"
+          echo "RFP Radar에서 수집은 했지만 S/A/B 등급 공고가 없었습니다."
       
-      # 11. 결과 아카이브
+      # 11. 결과 아카이브 (파일이 있을 때만)
       - name: Archive SPD results
-        if: always()
+        if: always() && steps.auto_fetch.outputs.has_results == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: spd-results-${{ github.run_id }}
@@ -138,3 +159,4 @@ jobs:
             spd/data/analysis_results/
             spd/data/reports/
           retention-days: 14
+          if-no-files-found: ignore
