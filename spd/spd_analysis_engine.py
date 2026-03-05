@@ -48,6 +48,15 @@ except ImportError:
     chromadb = None
     print("⚠️ chromadb 미설치 — 유사 프로젝트 매칭 비활성화")
 
+# knowledge_base 매칭 (있으면 사용, 없으면 스킵)
+try:
+    from kb_matcher import get_kb_matches
+    KB_AVAILABLE = True
+    print("✅ knowledge_base.json 매칭 활성화")
+except ImportError:
+    KB_AVAILABLE = False
+    print("ℹ️ kb_matcher 미발견 — knowledge_base 매칭 비활성화")
+
 # 프롬프트 버전 자동 감지: v3 → v2 → v1 (내장) fallback
 try:
     from spd_prompts_v3 import SYSTEM_PROMPT_V3, build_analysis_prompt_v3
@@ -323,10 +332,24 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
     rfp_text = load_rfp_text(bid_result, config)
     log.info(f"  📄 RFP 텍스트: {len(rfp_text):,}자")
     
-    # Step 2: 유사 프로젝트 매칭
+    # Step 2: ChromaDB 유사 프로젝트 매칭 (기존 그대로)
     query_text = f"{title} {bid_result.get('agency', '')} {rfp_text[:1000]}"
     similar_projects = get_similar_projects(query_text, config)
-    
+
+    # Step 2.5: knowledge_base.json 매칭 (새로 추가)
+    kb_result = {"matched_count": 0, "projects": [], "prompt_injection": ""}
+    if KB_AVAILABLE:
+        try:
+            kb_result = get_kb_matches(
+                title=title,
+                agency=bid_result.get("agency", ""),
+                rfp_text=rfp_text,
+                top_n=5,
+            )
+            log.info(f"  📚 KB 유사 프로젝트: {kb_result['matched_count']}건")
+        except Exception as kb_err:
+            log.warning(f"  ⚠️ KB 매칭 실패 (무시하고 계속): {kb_err}")
+
     # Step 3: GPT 분석
     if dry_run:
         log.info(f"  🔍 DRY-RUN — GPT 호출 스킵")
@@ -336,19 +359,26 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
             "status": "dry_run",
             "rfp_text_length": len(rfp_text),
             "similar_projects": len(similar_projects),
+            "kb_matched_count": kb_result.get("matched_count", 0),
         }
-    
+
+    # ★ KB 인사이트를 RFP 텍스트 뒤에 추가 (프롬프트 주입)
+    analysis_rfp_text = rfp_text
+    if kb_result.get("prompt_injection"):
+        analysis_rfp_text = rfp_text + "\n\n" + kb_result["prompt_injection"]
+        log.info(f"  📝 KB 인사이트 {len(kb_result['prompt_injection'])}자 주입")
+
     log.info(f"  🤖 GPT-4o 정밀분석 시작... (프롬프트: {PROMPT_VERSION})")
     start_time = time.time()
-    
+
     if PROMPT_VERSION == "v3":
-        prompt = build_analysis_prompt_v3(bid_result, rfp_text, similar_projects)
+        prompt = build_analysis_prompt_v3(bid_result, analysis_rfp_text, similar_projects)
         gpt_result = call_gpt(SYSTEM_PROMPT_V3, prompt, config)
     elif PROMPT_VERSION == "v2":
-        prompt = build_analysis_prompt_v2(bid_result, rfp_text, similar_projects)
+        prompt = build_analysis_prompt_v2(bid_result, analysis_rfp_text, similar_projects)
         gpt_result = call_gpt(SYSTEM_PROMPT_V2, prompt, config)
     else:
-        prompt = build_analysis_prompt_v1(bid_result, rfp_text, similar_projects)
+        prompt = build_analysis_prompt_v1(bid_result, analysis_rfp_text, similar_projects)
         gpt_result = call_gpt(SYSTEM_PROMPT_V1, prompt, config)
     
     elapsed = time.time() - start_time
@@ -366,6 +396,12 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "rfp_text_length": len(rfp_text),
         "similar_projects_count": len(similar_projects),
         "similar_projects": similar_projects,
+        # ★ KB 매칭 결과 추가
+        "kb_matched_count": kb_result.get("matched_count", 0),
+        "kb_matched_projects": [
+            {"name": p["project_name"], "client": p["client_org"], "year": p["year"], "score": p["score"]}
+            for p in kb_result.get("projects", [])
+        ],
         "analysis": gpt_result,
         "elapsed_seconds": round(elapsed, 1),
         "status": "error" if "error" in gpt_result else "completed",

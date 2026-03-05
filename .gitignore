@@ -12,6 +12,9 @@ rfp_radar/data/daily_reports/*.xlsx
 rfp_radar/data/daily_reports/*.html
 !rfp_radar/data/daily_reports/.gitkeep
 
+# SPD - knowledge_base.json (1.8MB, WPG에서 복사)
+spd/data/knowledge_base.json
+
 # Python
 __pycache__/
 *.pyc
