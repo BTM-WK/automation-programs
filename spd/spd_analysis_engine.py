@@ -333,6 +333,7 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         return {
             "bid_no": bid_no,
             "title": title,
+            "url": bid_result.get("url", ""),
             "status": "dry_run",
             "rfp_text_length": len(rfp_text),
             "similar_projects": len(similar_projects),
@@ -361,6 +362,7 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "grade": bid_result.get("grade", "?"),
         "agency": bid_result.get("agency", ""),
         "budget_str": bid_result.get("budget_str", ""),
+        "url": bid_result.get("url", ""),
         "analyzed_at": datetime.now().isoformat(),
         "prompt_version": PROMPT_VERSION,
         "rfp_text_length": len(rfp_text),

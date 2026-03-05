@@ -169,6 +169,7 @@ def build_email_body(input_json):
             "title": a.get("bid_title") or a.get("title", "제목 없음"),
             "agency": a.get("agency", ""),
             "budget": a.get("budget_text") or a.get("budget_str", ""),
+            "url": a.get("url", ""),
             "score": total_score,
             "decision": decision,
             "scoring": scoring if isinstance(scoring, dict) else {},
@@ -206,8 +207,11 @@ def build_email_body(input_json):
         nogo_style = 'color:#aaa;' if it["decision"] == "NO-GO" else ""
         bold_open = "<strong>" if it["decision"] == "GO" else ""
         bold_close = "</strong>" if it["decision"] == "GO" else ""
+        title_display = it['title'][:45]
+        if it.get('url'):
+            title_display = f'<a href="{it["url"]}" target="_blank" style="color:inherit;text-decoration:underline">{title_display}</a>'
         rows_html += f'''<tr>
-          <td style="padding:8px 10px;border-bottom:1px solid #eee;{nogo_style}">{bold_open}{it['title'][:45]}{bold_close}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #eee;{nogo_style}">{bold_open}{title_display}{bold_close}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eee;{nogo_style}">{it['agency'][:12]}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;{nogo_style}">{it['budget']}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:800;color:{_score_color(it['score'])}">{it['score']}</td>
@@ -352,9 +356,9 @@ def build_email_body(input_json):
               <td style="font-size:12px;font-weight:700;color:{accent};letter-spacing:1px;vertical-align:middle">{label_text}</td>
             </tr>
           </table>
-          <div style="font-size:17px;font-weight:700;color:#1B365D;margin:8px 0 4px;line-height:1.4">{featured['title']}</div>
+          <div style="font-size:17px;font-weight:700;color:#1B365D;margin:8px 0 4px;line-height:1.4">{'<a href="' + featured["url"] + '" target="_blank" style="color:#1B365D;text-decoration:underline">' + featured["title"] + '</a>' if featured.get("url") else featured["title"]}</div>
           <div style="font-size:13px;color:#666;margin-bottom:16px">
-            <strong style="color:#333">{featured['agency']}</strong> &#183; 예산 <strong style="color:#333">{featured['budget']}</strong>
+            <strong style="color:#333">{featured['agency']}</strong> &#183; 예산 <strong style="color:#333">{featured['budget']}</strong>{'  &#183;  <a href="' + featured["url"] + '" target="_blank" style="color:#2E75B6;font-size:11px;text-decoration:none">📎 공고 원문 보기</a>' if featured.get("url") else ''}
           </div>
           <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0">
             <tr>

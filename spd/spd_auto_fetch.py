@@ -552,6 +552,10 @@ def process_bid(bid: Dict, config: Dict, dry_run: bool = False) -> Dict:
         grade = bid["score"].get("grade", "?")
     agency = bid.get("agency", bid.get("dminsttNm", ""))
     budget = bid.get("budget_str", bid.get("budget", bid.get("presmptPrce", "")))
+    # 공고 URL: RFP Radar에서 전달받거나 bid_no로 생성
+    bid_url = bid.get("url", "")
+    if not bid_url and bid_no != "unknown":
+        bid_url = f"https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo={bid_no}&bidPbancOrd=00"
     
     log.info(f"\n{'='*60}")
     log.info(f"📋 [{grade}] {title}")
@@ -563,6 +567,7 @@ def process_bid(bid: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "grade": grade,
         "agency": agency,
         "budget_str": str(budget),
+        "url": bid_url,
         "processed_at": datetime.now().isoformat(),
         "files_downloaded": [],
         "texts_extracted": [],
