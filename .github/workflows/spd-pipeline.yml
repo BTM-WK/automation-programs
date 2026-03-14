@@ -6,7 +6,7 @@ on:
     workflows: ["RFP Radar Daily"]
     types: [completed]
     branches: [main]
-  
+
   # 수동 실행
   workflow_dispatch:
     inputs:
@@ -23,32 +23,36 @@ on:
         required: false
         default: 'false'
         type: boolean
+      skip_bridge:
+        description: 'WPG 브릿지 스킵 (테스트용)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   spd-analysis:
     runs-on: ubuntu-latest
-    # RFP Radar 성공 시에만 실행 (수동 트리거는 항상)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    
+
     steps:
-      # 1. 코드 체크아웃
+      # ── 1. 코드 체크아웃 ──────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
-      
-      # 2. Python 설정
+
+      # ── 2. Python 설정 ────────────────────────────────────────────────────
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
-      # 3. 의존성 설치
+
+      # ── 3. 의존성 설치 ────────────────────────────────────────────────────
       - name: Install dependencies
         run: |
           pip install -r spd/requirements.txt
-          # HWP 변환용 LibreOffice
           sudo apt-get update && sudo apt-get install -y libreoffice-core libreoffice-writer
-      
-      # 4. RFP Radar 결과 가져오기 (워크플로우 트리거 시)
+
+
+      # ── 4. RFP Radar 결과 다운로드 (workflow_run 트리거 시) ───────────────
       - name: Download RFP Radar results
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v4
@@ -58,16 +62,17 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
-      
-      # 5. 출력 디렉토리 생성
+
+      # ── 5. 출력 디렉토리 생성 ─────────────────────────────────────────────
       - name: Create output directories
         run: |
           mkdir -p spd/data/downloads
           mkdir -p spd/data/extracted
           mkdir -p spd/data/fetch_results
           mkdir -p spd/data/analysis_results
-      
-      # 6. Phase 1-A: Auto-Fetch
+          mkdir -p wpg/spd_inbox
+
+      # ── 6. Phase 1-A: Auto-Fetch ──────────────────────────────────────────
       - name: Run Auto-Fetch
         id: auto_fetch
         env:
@@ -76,26 +81,24 @@ jobs:
         run: |
           GRADE="${{ github.event.inputs.min_grade || 'B' }}"
           BID="${{ github.event.inputs.specific_bid || '' }}"
-
           CMD="python spd_auto_fetch.py --grade $GRADE"
           if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
-
           echo "🚀 Auto-Fetch: $CMD"
           eval $CMD
-
-          # fetch 결과 존재 여부 → 후속 단계 조건 분기
           FETCH_COUNT=$(ls data/fetch_results/fetch_*.json 2>/dev/null | wc -l)
           if [ "$FETCH_COUNT" -gt "0" ]; then
             echo "has_results=true" >> $GITHUB_OUTPUT
             echo "✅ Fetch 결과: ${FETCH_COUNT}건"
           else
             echo "has_results=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ 오늘 분석 대상 공고 0건 — 후속 단계 스킵"
+            echo "ℹ️ 오늘 분석 대상 공고 0건"
           fi
 
-      # 7. Phase 1-B: Analysis (fetch 결과 있을 때만)
+
+      # ── 7. Phase 1-B: Analysis Engine ────────────────────────────────────
       - name: Run Analysis Engine
         if: steps.auto_fetch.outputs.has_results == 'true'
+        id: analysis
         env:
           RFP_OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.RFP_OPENAI_API_KEY }}
@@ -103,22 +106,24 @@ jobs:
         run: |
           DRY="${{ github.event.inputs.dry_run || 'false' }}"
           BID="${{ github.event.inputs.specific_bid || '' }}"
-
           CMD="python spd_analysis_engine.py"
           if [ "$DRY" = "true" ]; then CMD="$CMD --dry-run"; fi
           if [ -n "$BID" ]; then CMD="$CMD --bid $BID"; fi
-
           echo "🔬 Analysis: $CMD"
           eval $CMD
+          # 분석 결과 존재 여부 체크
+          ANALYSIS_COUNT=$(ls data/analysis_results/*.json 2>/dev/null | grep -v test | wc -l)
+          echo "analysis_count=${ANALYSIS_COUNT}" >> $GITHUB_OUTPUT
+          echo "📊 분석 결과: ${ANALYSIS_COUNT}건"
 
-      # 8. Node.js 설정 (DOCX 생성용, fetch 결과 있을 때만)
+      # ── 8. Node.js 설정 ───────────────────────────────────────────────────
       - name: Setup Node.js
         if: steps.auto_fetch.outputs.has_results == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 9. DOCX 리포트 생성 (fetch 결과 있을 때만)
+      # ── 9. DOCX 리포트 생성 ───────────────────────────────────────────────
       - name: Generate DOCX Report
         if: steps.auto_fetch.outputs.has_results == 'true'
         working-directory: spd
@@ -128,7 +133,7 @@ jobs:
           python spd_report.py --latest
           echo "📄 DOCX 리포트 생성 완료"
 
-      # 10. 이메일 발송 (fetch 결과 있을 때만)
+      # ── 10. 이메일 발송 ───────────────────────────────────────────────────
       - name: Send Email Report
         if: ${{ steps.auto_fetch.outputs.has_results == 'true' && github.event.inputs.dry_run != 'true' }}
         env:
@@ -141,22 +146,74 @@ jobs:
           python spd_report.py --latest --email
         continue-on-error: true
 
-      # 10-1. 0건 안내 (분석 대상 없을 때)
+
+      # ── 11. SPD → WPG 브릿지 (핵심 신규 단계) ────────────────────────────
+      # 분석 완료된 GO/CONDITIONAL 공고를 WPG spd_inbox에 자동 투입
+      # 조건: 분석 결과 있고 + DRY-RUN 아니고 + 브릿지 스킵 플래그 아닐 때
+      - name: SPD to WPG Bridge
+        if: |
+          steps.auto_fetch.outputs.has_results == 'true' &&
+          github.event.inputs.dry_run != 'true' &&
+          github.event.inputs.skip_bridge != 'true'
+        id: bridge
+        working-directory: spd
+        run: |
+          echo "🔗 SPD → WPG 브릿지 실행"
+
+          # WPG spd_inbox 디렉토리를 Actions 환경에 생성
+          mkdir -p ../wpg/spd_inbox
+
+          # 브릿지 실행 (WPG_ROOT 환경변수로 경로 전달)
+          WPG_INBOX_OVERRIDE="../wpg/spd_inbox" python -c "
+          import os, sys
+          sys.path.insert(0, '.')
+
+          # 인라인으로 WPG_INBOX_DIR 오버라이드
+          inbox_dir = os.environ.get('WPG_INBOX_OVERRIDE', '../wpg/spd_inbox')
+          os.makedirs(inbox_dir, exist_ok=True)
+
+          import spd_to_wpg_bridge as bridge
+          bridge.WPG_INBOX_DIR = inbox_dir
+
+          result = bridge.run_bridge(min_score=65, dry_run=False)
+          print(f'투입 완료: {result[\"pushed\"]}건')
+
+          # GitHub Output에 결과 기록
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f'bridge_pushed={result[\"pushed\"]}\n')
+          "
+
+          echo "✅ WPG inbox 투입 완료"
+          ls -la ../wpg/spd_inbox/ 2>/dev/null || echo "(inbox 파일 없음 — GO 공고 없음)"
+
+      # ── 11-1. 0건 안내 ────────────────────────────────────────────────────
       - name: No bids today
         if: steps.auto_fetch.outputs.has_results == 'false'
         run: |
           echo "📭 오늘 WKMG 매칭 공고 0건 — 파이프라인 정상 종료"
-          echo "RFP Radar에서 수집은 했지만 S/A/B 등급 공고가 없었습니다."
-      
-      # 11. 결과 아카이브 (파일이 있을 때만)
-      - name: Archive SPD results
+
+      # ── 12. 전체 결과 아카이브 ────────────────────────────────────────────
+      - name: Archive all results
         if: always() && steps.auto_fetch.outputs.has_results == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: spd-results-${{ github.run_id }}
+          name: spd-wpg-results-${{ github.run_id }}
           path: |
             spd/data/fetch_results/
             spd/data/analysis_results/
             spd/data/reports/
+            wpg/spd_inbox/
           retention-days: 14
           if-no-files-found: ignore
+
+      # ── 13. 파이프라인 요약 ───────────────────────────────────────────────
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "======================================"
+          echo "  RFP Radar → SPD → WPG 파이프라인"
+          echo "======================================"
+          echo "  Fetch 결과:    ${{ steps.auto_fetch.outputs.has_results }}"
+          echo "  분석 건수:     ${{ steps.analysis.outputs.analysis_count || 0 }}"
+          echo "  WPG 투입:      ${{ steps.bridge.outputs.bridge_pushed || 0 }}건"
+          echo "======================================"
