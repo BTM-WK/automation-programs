@@ -1,227 +1,277 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-SPD → WPG 브릿지 모듈
-========================
-SPD가 발굴한 GO 공고를 WPG 제안서 생성 파이프라인으로 자동 연결.
+SPD -> WPG Bridge
+=================
+SPD 분석 결과(analysis_*.json)에서 GO/CONDITIONAL 공고를 추출하여
+WPG의 spd_inbox/ 폴더에 JSON으로 전달한다.
 
-Author: WKMG
-Version: 1.1.0 (2026-03-14) — analysis_engine 실제 출력 구조 대응
+사용법:
+  python spd_to_wpg_bridge.py                    # 최신 분석 결과 자동 전달
+  python spd_to_wpg_bridge.py --file analysis_20260323.json  # 특정 파일
+  python spd_to_wpg_bridge.py --all              # 미전달 전체 처리
+  python spd_to_wpg_bridge.py --dry-run          # 실제 저장 없이 미리보기
 """
 
-import os, json, glob
+import json
+import os
+import re
+import sys
+import glob
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-# ─── 경로 설정 ────────────────────────────────────────────────────────────────
-_BASE = os.path.dirname(os.path.abspath(__file__))
-SPD_DATA_DIR = os.path.join(_BASE, "data", "analysis_results")
+log = logging.getLogger("spd_to_wpg_bridge")
 
-WPG_ROOT = next((p for p in [
-    r"C:\Users\yso\OneDrive\Documents\GitHub\WPG",
-    r"C:\Users\wangk\OneDrive\Documents\GitHub\WPG",
-] if os.path.isdir(p)), None)
+# ═══════════════════════════════════════════════════
+# 경로 설정 (멀티PC 대응: yso/wangk)
+# ═══════════════════════════════════════════════════
 
-WPG_INBOX_DIR = os.path.join(WPG_ROOT, "spd_inbox") if WPG_ROOT else None
+SCRIPT_DIR = Path(__file__).parent
+SPD_ANALYSIS_DIR = SCRIPT_DIR / "data" / "analysis_results"
 
 
-# ─── 필드 추출 헬퍼 (analysis_engine 출력 + test_email.json 양쪽 대응) ────────
-
-def _get_title(item: dict) -> str:
-    """공고명: analysis_engine → 'title', test_email → 'bid_title'"""
-    return item.get("title") or item.get("bid_title") or ""
-
-def _get_agency(item: dict) -> str:
-    return item.get("agency") or ""
-
-def _get_budget(item: dict) -> str:
-    """예산: analysis_engine → 'budget_str', test_email → 'budget_text'"""
-    return item.get("budget_str") or item.get("budget_text") or item.get("budget") or ""
-
-def _get_bid_no(item: dict) -> str:
-    return str(item.get("bid_no") or item.get("bidNtceNo") or "")
-
-def _get_url(item: dict) -> str:
-    return item.get("url") or ""
-
-def _get_decision(item: dict) -> str:
-    """
-    Go/No-Go 결정값 추출.
-    - analysis_engine v3: analysis.go_no_go.decision (dict)
-    - analysis_engine v1/v2: analysis.go_no_go (문자열 "GO"/"NO-GO")
-    - test_email: analysis.go_no_go.decision (dict)
-    """
-    a = item.get("analysis", {})
-    if not a:
-        return "UNKNOWN"
-    gng = a.get("go_no_go", {})
-    if isinstance(gng, dict):
-        return gng.get("decision", "UNKNOWN")
-    return str(gng) if gng else "UNKNOWN"
-
-def _get_score(item: dict) -> int:
-    """점수: analysis.scoring.total_score"""
-    a = item.get("analysis", {})
-    if not a:
-        return 0
-    scoring = a.get("scoring", {})
-    if isinstance(scoring, dict):
-        return int(scoring.get("total_score", 0))
-    return int(a.get("total_score", 0))
-
-def _get_coverage(item: dict) -> int:
-    a = item.get("analysis", {})
-    deliv = a.get("deliverables_analysis", {}) if a else {}
-    return int(deliv.get("wkmg_coverage_pct", 0)) if isinstance(deliv, dict) else 0
-
-def _get_key_tasks(item: dict) -> list:
-    a = item.get("analysis", {})
-    deliv = a.get("deliverables_analysis", {}) if a else {}
-    tasks = deliv.get("key_tasks", []) if isinstance(deliv, dict) else []
-    return [
-        {"task": t.get("task", ""), "capability": t.get("capability", ""),
-         "partner": t.get("required_partner", "")}
-        for t in tasks if isinstance(t, dict)
+def _find_wpg_inbox() -> Path:
+    """WPG inbox 경로 자동 감지 (OneDrive 동기화)"""
+    candidates = [
+        Path(r"C:\Users\yso\OneDrive\Documents\GitHub\WPG\spd_inbox"),
+        Path(r"C:\Users\wangk\OneDrive\Documents\GitHub\WPG\spd_inbox"),
+        SCRIPT_DIR.parent / "WPG" / "spd_inbox",
     ]
-
-def _get_strategic_rec(item: dict) -> dict:
-    a = item.get("analysis", {})
-    return a.get("strategic_recommendation", {}) if a else {}
-
-def _get_similar_projects(item: dict) -> list:
-    """유사 프로젝트: analysis_engine → similar_projects[].project_name or filename"""
-    projects = item.get("similar_projects", [])
-    result = []
-    for p in projects:
-        if isinstance(p, dict):
-            name = p.get("project_name") or p.get("filename") or p.get("name") or ""
-            if name:
-                result.append(name)
-        elif isinstance(p, str):
-            result.append(p)
-    return result
+    for c in candidates:
+        if c.parent.exists():
+            c.mkdir(parents=True, exist_ok=True)
+            return c
+    fallback = SCRIPT_DIR / "wpg_inbox_pending"
+    fallback.mkdir(exist_ok=True)
+    log.warning(f"WPG inbox not found. fallback: {fallback}")
+    return fallback
 
 
-# ─── 핵심 함수 ────────────────────────────────────────────────────────────────
-
-def get_latest_analysis() -> Optional[dict]:
-    """SPD 최신 분석 결과 JSON 반환"""
-    if not os.path.isdir(SPD_DATA_DIR):
-        return None
-    files = sorted(glob.glob(os.path.join(SPD_DATA_DIR, "*.json")),
-                   key=os.path.getmtime, reverse=True)
-    real_files = [f for f in files if "test" not in os.path.basename(f).lower()]
-    target = real_files[0] if real_files else (files[0] if files else None)
-    if not target:
-        return None
-    with open(target, encoding="utf-8") as f:
-        data = json.load(f)
-    data["_source_file"] = os.path.basename(target)
-    return data
+WPG_INBOX_DIR = _find_wpg_inbox()
 
 
-def filter_go_bids(analysis_data: dict, min_score: int = 65) -> list:
-    """GO 또는 CONDITIONAL 공고만 추출"""
-    result = []
-    for item in analysis_data.get("analyses", []):
-        decision = _get_decision(item)
-        score    = _get_score(item)
-        if decision in ("GO", "CONDITIONAL") and score >= min_score:
-            result.append(item)
-    result.sort(key=lambda x: _get_score(x), reverse=True)
-    return result
+# ═══════════════════════════════════════════════════
+# SPD 분석 결과 -> WPG Inbox JSON 변환
+# ═══════════════════════════════════════════════════
 
+def convert_spd_to_wpg_inbox(analysis_item: dict, source_file: str) -> dict:
+    """SPD 분석 결과 1건 -> WPG inbox JSON 1건 변환. v1/v2/v3 구조 모두 호환."""
 
-def convert_to_wpg_format(spd_item: dict, source_file: str = "") -> dict:
-    """SPD 분석 결과 1건 → WPG inbox 형식 변환 (양쪽 구조 모두 대응)"""
-    rec   = _get_strategic_rec(spd_item)
-    title = _get_title(spd_item)
-    agency = _get_agency(spd_item)
+    analysis = analysis_item.get("analysis", {})
+
+    # --- GO/NO-GO 판정 ---
+    go_section = analysis.get("go_no_go", {})
+    if isinstance(go_section, dict):
+        decision = go_section.get("decision", "UNKNOWN")
+    else:
+        decision = str(go_section)
+
+    # --- 점수 ---
+    scoring = analysis.get("scoring", {})
+    total_score = scoring.get("total_score", 0) if isinstance(scoring, dict) else analysis.get("total_score", 0)
+
+    # --- 커버리지 (v3: deliverables_analysis.wkmg_coverage_pct) ---
+    deliv = analysis.get("deliverables_analysis", {})
+    if isinstance(deliv, dict):
+        coverage_pct = deliv.get("wkmg_coverage_pct", 0)
+    else:
+        cov = analysis.get("wkmg_coverage", {})
+        coverage_pct = cov.get("coverage_pct", 0) if isinstance(cov, dict) else 0
+
+    # --- 전략 추천 (v3: strategic_recommendation) ---
+    strat = analysis.get("strategic_recommendation", {})
+    if isinstance(strat, dict):
+        core_message = strat.get("core_message", "")
+        differentiators = strat.get("key_differentiators", [])
+        partners = strat.get("required_partners", "")
+    else:
+        core_message = str(strat) if strat else ""
+        comp = analysis.get("competitive_advantage", {})
+        differentiators = comp.get("key_differentiators", []) if isinstance(comp, dict) else []
+        partners = analysis.get("required_partners", "")
+
+    # --- 핵심 과업 (v3: deliverables_analysis.key_tasks) ---
+    if isinstance(deliv, dict):
+        tasks_raw = deliv.get("key_tasks", [])
+    else:
+        tasks_raw = analysis.get("key_tasks", [])
+
+    key_tasks = []
+    if isinstance(tasks_raw, list):
+        for t in tasks_raw:
+            if isinstance(t, dict):
+                key_tasks.append({
+                    "task": t.get("task", t.get("name", "")),
+                    "capability": t.get("capability", t.get("wkmg_capability", "")),
+                    "partner": t.get("partner", t.get("required_partner", "")),
+                })
+            else:
+                key_tasks.append({"task": str(t), "capability": "", "partner": ""})
+
+    # --- 유사 프로젝트 ---
+    similar = analysis_item.get("similar_projects", [])
+    similar_names = []
+    if isinstance(similar, list):
+        for sp in similar:
+            if isinstance(sp, dict):
+                similar_names.append(sp.get("project_name", sp.get("filename", str(sp))))
+            else:
+                similar_names.append(str(sp))
+
+    if isinstance(partners, list):
+        partners = ", ".join(partners)
+
+    # --- RFP 텍스트 ---
+    rfp_text = analysis_item.get("rfp_text", "")
+    if not rfp_text:
+        rfp_text = f"{analysis_item.get('bid_title', '')} {analysis_item.get('agency', '')}"
 
     return {
-        "wpg_inbox_version": "1.1",
+        "wpg_inbox_version": "1.0",
         "created_at": datetime.now().isoformat(),
         "source": "SPD",
         "source_file": source_file,
-        # ── 용역 기본 정보 (WPG + 이후 모든 단계가 사용) ────────
-        "bid_title":   title,
-        "agency":      agency,
-        "budget_text": _get_budget(spd_item),
-        "bid_no":      _get_bid_no(spd_item),
-        "url":         _get_url(spd_item),
-        "rfp_text":    f"{title} {agency}",
-        # ── SPD 분석 결과 (WPG 집요분석 참고용) ─────────────────
-        "spd_score":          _get_score(spd_item),
-        "spd_decision":       _get_decision(spd_item),
-        "coverage_pct":       _get_coverage(spd_item),
-        "core_message":       rec.get("core_message", ""),
-        "key_differentiators": rec.get("key_differentiators", []),
-        "key_tasks":          _get_key_tasks(spd_item),
-        "similar_projects":   _get_similar_projects(spd_item),
-        "required_partners":  rec.get("required_partners", ""),
-        # ── WPG 처리 상태 ────────────────────────────────────────
+        "bid_title": analysis_item.get("bid_title", ""),
+        "agency": analysis_item.get("agency", analysis_item.get("demand_agency", "")),
+        "budget_text": analysis_item.get("budget_text", analysis_item.get("estimated_price", "")),
+        "rfp_text": rfp_text,
+        "spd_score": total_score,
+        "spd_decision": decision,
+        "coverage_pct": coverage_pct,
+        "core_message": core_message,
+        "key_differentiators": differentiators,
+        "key_tasks": key_tasks,
+        "similar_projects": similar_names[:5],
+        "required_partners": partners,
+        # SPD 상세 분석 결과 전체 (WPG 집요분석에서 활용 -> 중복 분석 방지)
+        "spd_full_analysis": analysis,
+        # WPG 상태 (초기값)
         "wpg_status": "PENDING",
         "wpg_proposal_path": "",
+        "wpg_job_id": "",
     }
 
 
-def push_to_wpg_inbox(go_bids: list, source_file: str = "") -> list:
-    """GO 공고들을 WPG spd_inbox 폴더에 저장"""
-    if not WPG_INBOX_DIR:
-        print("[WARN] WPG 루트를 찾을 수 없습니다.")
-        return []
-    os.makedirs(WPG_INBOX_DIR, exist_ok=True)
-    pushed = []
-    for bid in go_bids:
-        wpg_item = convert_to_wpg_format(bid, source_file)
-        ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe = "".join(c if c.isalnum() or c in "-_" else "_"
-                       for c in wpg_item["bid_title"][:30])
-        fname = f"spd_{ts}_{safe}.json"
-        fpath = os.path.join(WPG_INBOX_DIR, fname)
-        with open(fpath, "w", encoding="utf-8") as f:
-            json.dump(wpg_item, f, ensure_ascii=False, indent=2)
-        pushed.append(fpath)
-        print(f"  ✅ WPG inbox → {fname}  [점수:{wpg_item['spd_score']} / {wpg_item['spd_decision']}]")
-    return pushed
+def _make_inbox_filename(bid_title: str, timestamp: str) -> str:
+    """WPG inbox JSON 파일명 생성"""
+    safe_title = re.sub(r'[\\/:*?"<>|\s]+', '_', bid_title)[:60]
+    return f"spd_{timestamp}_{safe_title}.json"
 
 
-def run_bridge(min_score: int = 65, dry_run: bool = False) -> dict:
-    """브릿지 실행 엔트리포인트"""
-    print("=" * 60)
-    print("  SPD → WPG 브릿지 v1.1")
-    print("=" * 60)
+# ═══════════════════════════════════════════════════
+# 메인: 분석 결과 -> WPG Inbox 전달
+# ═══════════════════════════════════════════════════
 
-    data = get_latest_analysis()
-    if not data:
-        print("[ERROR] SPD 분석 결과 파일 없음:", SPD_DATA_DIR)
-        return {"pushed": 0, "skipped": 0, "files": []}
+def push_to_wpg_inbox(analysis_file: str, decisions: list = None, dry_run: bool = False) -> dict:
+    """SPD 분석 결과 파일에서 GO/CONDITIONAL 공고를 WPG inbox로 전달."""
+    if decisions is None:
+        decisions = ["GO", "CONDITIONAL"]
 
-    src   = data.get("_source_file", "unknown")
-    total = data.get("total_analyzed", len(data.get("analyses", [])))
-    print(f"\n분석 파일: {src}  (전체 {total}건)")
+    with open(analysis_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-    go_bids = filter_go_bids(data, min_score=min_score)
-    skipped = total - len(go_bids)
-    print(f"GO/CONDITIONAL: {len(go_bids)}건  |  NO-GO/미달: {skipped}건\n")
+    analyses = data.get("analyses", [])
+    source_name = os.path.basename(analysis_file)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    for b in go_bids:
-        print(f"  [{_get_decision(b):11s}] {_get_score(b):3d}점  {_get_title(b)[:40]}")
+    pushed, skipped, files_created = 0, 0, []
 
-    if dry_run:
-        print("\n[DRY RUN] inbox 저장 생략")
-        return {"pushed": 0, "skipped": skipped, "files": [], "go_bids": go_bids}
+    # 기존 inbox 파일들의 bid_title 목록 (중복 체크용, 한 번만 로드)
+    existing_titles = set()
+    for ef in WPG_INBOX_DIR.glob("spd_*.json"):
+        try:
+            with open(ef, "r", encoding="utf-8") as ef_f:
+                existing_titles.add(json.load(ef_f).get("bid_title", ""))
+        except Exception:
+            continue
 
-    print(f"\nWPG inbox: {WPG_INBOX_DIR}")
-    pushed_files = push_to_wpg_inbox(go_bids, src)
-    print(f"\n완료: {len(pushed_files)}건 WPG inbox 투입")
-    return {"pushed": len(pushed_files), "skipped": skipped, "files": pushed_files}
+    for item in analyses:
+        analysis = item.get("analysis", {})
+        go_section = analysis.get("go_no_go", {})
+        decision = go_section.get("decision", str(go_section)) if isinstance(go_section, dict) else str(go_section)
+        bid_title = item.get("bid_title", "")
 
+        if decision not in decisions:
+            skipped += 1
+            log.info(f"  skip {decision}: {bid_title}")
+            continue
+
+        if bid_title in existing_titles:
+            skipped += 1
+            log.info(f"  skip already exists: {bid_title}")
+            continue
+
+        inbox_json = convert_spd_to_wpg_inbox(item, source_name)
+        filename = _make_inbox_filename(bid_title, timestamp)
+        filepath = WPG_INBOX_DIR / filename
+
+        if dry_run:
+            log.info(f"  [DRY-RUN] {decision}: {bid_title} -> {filename}")
+        else:
+            with open(filepath, "w", encoding="utf-8") as out_f:
+                json.dump(inbox_json, out_f, ensure_ascii=False, indent=2)
+            log.info(f"  PUSHED {decision}: {bid_title} -> {filename}")
+
+        pushed += 1
+        files_created.append(str(filepath))
+        existing_titles.add(bid_title)
+
+    return {"pushed": pushed, "skipped": skipped, "files": files_created, "inbox_dir": str(WPG_INBOX_DIR)}
+
+
+def find_latest_analysis() -> Optional[str]:
+    """최신 분석 결과 파일 찾기"""
+    pattern = str(SPD_ANALYSIS_DIR / "analysis_*.json")
+    files = sorted(glob.glob(pattern), reverse=True)
+    return files[0] if files else None
+
+
+# ═══════════════════════════════════════════════════
+# spd_analysis_engine.py / spd_report.py에서 호출
+# ═══════════════════════════════════════════════════
+
+def auto_push_after_analysis(analysis_file: str) -> dict:
+    """SPD 분석 완료 후 자동 호출. GO/CONDITIONAL 공고를 WPG inbox로 전달."""
+    log.info(f"\n{'='*50}")
+    log.info(f"SPD -> WPG Inbox auto-push started")
+    log.info(f"   source: {analysis_file}")
+    log.info(f"   target: {WPG_INBOX_DIR}")
+    result = push_to_wpg_inbox(analysis_file, decisions=["GO", "CONDITIONAL"])
+    log.info(f"   pushed: {result['pushed']} | skipped: {result['skipped']}")
+    log.info(f"{'='*50}")
+    return result
+
+
+# ═══════════════════════════════════════════════════
+# CLI
+# ═══════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    import sys
-    dry = "--dry" in sys.argv
-    result = run_bridge(min_score=65, dry_run=dry)
-    if result.get("files"):
-        print("\n[다음 단계]")
-        print("  WPG UI > spd_inbox 탭에서 공고 확인 후 '집요분석 시작' 클릭")
+    import argparse
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    parser = argparse.ArgumentParser(description="SPD -> WPG Inbox Bridge")
+    parser.add_argument("--file", help="특정 분석 결과 파일")
+    parser.add_argument("--all", action="store_true", help="미전달 전체 처리")
+    parser.add_argument("--dry-run", action="store_true", help="실제 저장 없이 미리보기")
+    args = parser.parse_args()
+
+    if args.file:
+        result = push_to_wpg_inbox(args.file, dry_run=args.dry_run)
+    elif args.all:
+        pattern = str(SPD_ANALYSIS_DIR / "analysis_*.json")
+        for f in sorted(glob.glob(pattern)):
+            log.info(f"\nProcessing: {f}")
+            push_to_wpg_inbox(f, dry_run=args.dry_run)
+        sys.exit(0)
+    else:
+        latest = find_latest_analysis()
+        if latest:
+            result = push_to_wpg_inbox(latest, dry_run=args.dry_run)
+        else:
+            log.error("No analysis result files found.")
+            sys.exit(1)
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))

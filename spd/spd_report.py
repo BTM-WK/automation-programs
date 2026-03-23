@@ -612,6 +612,13 @@ def main():
         html_body = build_email_body(input_json)
         send_email(docx_path, html_body, config)
 
+    # 4.5 SPD → WPG Inbox 자동 전달
+    try:
+        from spd_to_wpg_bridge import auto_push_after_analysis
+        auto_push_after_analysis(input_json)
+    except Exception as e:
+        log.warning(f"WPG 자동 전달 실패: {e}")
+
     # 5. 완료 요약
     print(f"\n{'='*50}")
     print(f"  SPD Report 완료")

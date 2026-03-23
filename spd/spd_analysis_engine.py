@@ -496,6 +496,15 @@ def run_analysis(args):
     log.info(f"   결과: {output_file}")
     log.info(f"{'='*60}")
 
+    # ★ SPD → WPG Inbox 자동 전달
+    try:
+        from spd_to_wpg_bridge import auto_push_after_analysis
+        wpg_result = auto_push_after_analysis(output_file)
+    except ImportError:
+        log.warning("spd_to_wpg_bridge 모듈 없음 — WPG 전달 생략")
+    except Exception as e:
+        log.warning(f"WPG 전달 실패 (분석 결과는 정상 저장됨): {e}")
+
 # ═══════════════════════════════════════════════════════════════
 # CLI
 # ═══════════════════════════════════════════════════════════════
