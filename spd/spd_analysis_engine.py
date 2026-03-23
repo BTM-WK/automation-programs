@@ -124,6 +124,7 @@ def build_analysis_prompt_v1(bid_result: Dict, rfp_text: str, similar_projects: 
 - 공고명: {bid_result.get('title', '')}
 - 발주기관: {bid_result.get('agency', '')}
 - 예산: {bid_result.get('budget_str', '')}
+- 입찰 마감일: {bid_result.get('deadline', '미확인')}
 - 공고번호: {bid_result.get('bid_no', '')}
 - 등급: {bid_result.get('grade', '')}
 """)
@@ -362,6 +363,7 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "grade": bid_result.get("grade", "?"),
         "agency": bid_result.get("agency", ""),
         "budget_str": bid_result.get("budget_str", ""),
+        "deadline": bid_result.get("deadline", ""),
         "url": bid_result.get("url", ""),
         "analyzed_at": datetime.now().isoformat(),
         "prompt_version": PROMPT_VERSION,

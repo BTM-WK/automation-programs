@@ -144,6 +144,7 @@ def convert_spd_to_wpg_inbox(analysis_item: dict, source_file: str) -> dict:
         "key_tasks": key_tasks,
         "similar_projects": similar_names[:5],
         "required_partners": partners,
+        "deadline": analysis_item.get("deadline", ""),
         # SPD 상세 분석 결과 전체 (WPG 집요분석에서 활용 -> 중복 분석 방지)
         "spd_full_analysis": analysis,
         # WPG 상태 (초기값)
