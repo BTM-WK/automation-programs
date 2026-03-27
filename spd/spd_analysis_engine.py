@@ -359,14 +359,18 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
     # 결과 조합
     analysis = {
         "bid_no": bid_no,
+        "bid_title": title,
         "title": title,
         "grade": bid_result.get("grade", "?"),
         "agency": bid_result.get("agency", ""),
+        "demand_agency": bid_result.get("agency", ""),
         "budget_str": bid_result.get("budget_str", ""),
+        "budget_text": bid_result.get("budget_str", ""),
         "deadline": bid_result.get("deadline", ""),
         "url": bid_result.get("url", ""),
         "analyzed_at": datetime.now().isoformat(),
         "prompt_version": PROMPT_VERSION,
+        "rfp_text": rfp_text,
         "rfp_text_length": len(rfp_text),
         "similar_projects_count": len(similar_projects),
         "similar_projects": similar_projects,

@@ -122,8 +122,33 @@ def convert_spd_to_wpg_inbox(analysis_item: dict, source_file: str) -> dict:
     if isinstance(partners, list):
         partners = ", ".join(partners)
 
-    # --- RFP 텍스트 ---
+    # --- RFP 텍스트 (전문) ---
     rfp_text = analysis_item.get("rfp_text", "")
+
+    # rfp_text가 비었으면 texts_extracted 경로에서 직접 로드
+    if not rfp_text or len(rfp_text) < 100:
+        for ext in analysis_item.get("texts_extracted", []):
+            tf = ext.get("text_file", "")
+            if tf and os.path.exists(tf):
+                try:
+                    with open(tf, "r", encoding="utf-8") as _tf:
+                        rfp_text += "\n\n" + _tf.read()
+                except Exception:
+                    pass
+        # extracted_texts/ 디렉토리에서 bid_no 매칭 시도
+        if not rfp_text or len(rfp_text) < 100:
+            bid_no = analysis_item.get("bid_no", "")
+            if bid_no:
+                ext_dir = SCRIPT_DIR / "extracted_texts"
+                for tf in ext_dir.glob("*.txt"):
+                    try:
+                        content = tf.read_text(encoding="utf-8")
+                        if bid_no in content[:500]:
+                            rfp_text = content
+                            break
+                    except Exception:
+                        pass
+
     if not rfp_text:
         rfp_text = f"{analysis_item.get('bid_title', '')} {analysis_item.get('agency', '')}"
 
