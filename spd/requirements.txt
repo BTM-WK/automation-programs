@@ -1,0 +1,16 @@
+# SPD System Dependencies
+# pip install -r requirements.txt --break-system-packages
+
+# Phase 1-A: Auto-Fetch
+requests>=2.31.0
+pdfplumber>=0.10.0
+python-pptx>=0.6.21
+python-docx>=1.0.0
+
+# Phase 1-B: Analysis Engine
+openai>=1.12.0
+chromadb>=0.4.22
+
+# Phase 2: Dashboard
+streamlit>=1.31.0
+pandas>=2.1.0
