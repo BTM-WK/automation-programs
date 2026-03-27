@@ -372,6 +372,7 @@ def analyze_bid(bid_result: Dict, config: Dict, dry_run: bool = False) -> Dict:
         "prompt_version": PROMPT_VERSION,
         "rfp_text": rfp_text,
         "rfp_text_length": len(rfp_text),
+        "texts_extracted": bid_result.get("texts_extracted", []),
         "similar_projects_count": len(similar_projects),
         "similar_projects": similar_projects,
         "analysis": gpt_result,
