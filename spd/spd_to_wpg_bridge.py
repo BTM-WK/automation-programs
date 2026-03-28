@@ -67,6 +67,14 @@ def convert_spd_to_wpg_inbox(analysis_item: dict, source_file: str) -> dict:
     else:
         decision = str(go_section)
 
+    # --- ★ 입찰 자격요건 검증 (v3.1) ---
+    eligibility = analysis.get("eligibility_check", {})
+    is_eligible = eligibility.get("is_eligible", True) if isinstance(eligibility, dict) else True
+    disqualification_reason = ""
+    if isinstance(eligibility, dict) and not is_eligible:
+        disqualification_reason = eligibility.get("disqualification_reason", "자격요건 미충족")
+        decision = "NO-GO"  # 자격 미충족 시 점수와 관계없이 NO-GO 강제
+
     # --- 점수 ---
     scoring = analysis.get("scoring", {})
     total_score = scoring.get("total_score", 0) if isinstance(scoring, dict) else analysis.get("total_score", 0)
@@ -163,6 +171,10 @@ def convert_spd_to_wpg_inbox(analysis_item: dict, source_file: str) -> dict:
         "rfp_text": rfp_text,
         "spd_score": total_score,
         "spd_decision": decision,
+        "eligibility": {
+            "is_eligible": is_eligible,
+            "disqualification_reason": disqualification_reason,
+        },
         "coverage_pct": coverage_pct,
         "core_message": core_message,
         "key_differentiators": differentiators,
